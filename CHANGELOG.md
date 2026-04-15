@@ -15,6 +15,7 @@
 ### ✨ Technical Improvements
 
 - *...Add new stuff here...*
+- [linux] Add `MLN_LINUX_STATIC_DEPS` CMake option to vendor zlib, libpng, libjpeg-turbo, libwebp, libuv, and bzip2 as static libraries for portable shared library builds.
 - Bump [maplibre-native-base](https://github.com/maplibre/maplibre-native-base) from 2.0.0 to 2.1.1 ([#397](https://github.com/maplibre/maplibre-native/pull/397), [#406](https://github.com/maplibre/maplibre-native/pull/406))
 - Bump [wagyu](https://github.com/mapbox/wagyu) from 0.4.3 to 0.5.0 [#398](https://github.com/maplibre/maplibre-native/pull/398)
 - Bump [eternal](https://github.com/mapbox/eternal.git) from 1.0.0 to 1.0.1
