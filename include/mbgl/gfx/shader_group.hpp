@@ -4,11 +4,11 @@
 #include <mbgl/util/containers.hpp>
 #include <mbgl/util/hash.hpp>
 
-#include <iomanip>
+#include <array>
+#include <charconv>
 #include <memory>
 #include <mutex>
 #include <shared_mutex>
-#include <sstream>
 #include <string>
 
 namespace mbgl {
@@ -165,7 +165,15 @@ protected:
     using PropertyHashType = std::uint64_t;
 
     std::string getShaderName(const std::string_view& name, const PropertyHashType key) {
-        return (std::ostringstream() << name << '#' << std::hex << key).str();
+        std::array<char, sizeof(PropertyHashType) * 2> keyBuffer{};
+        const auto [end, error] = std::to_chars(keyBuffer.data(), keyBuffer.data() + keyBuffer.size(), key, 16);
+
+        std::string shaderName{name};
+        shaderName.push_back('#');
+        if (error == std::errc()) {
+            shaderName.append(keyBuffer.data(), end);
+        }
+        return shaderName;
     }
 
     /// Generate a map key for the specified combination of properties
