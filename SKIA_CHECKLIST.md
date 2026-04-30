@@ -1,0 +1,124 @@
+# Skia Rendering Backend Checklist
+
+- [x] Define Skia backend project scope and architecture in `SKIA_RESEARCH.md`.
+- [x] Add `MLN_WITH_SKIA` build option.
+- [x] Add Skia to backend option validation.
+- [x] Add `gfx::Backend::Type::Skia`.
+- [x] Route `gfx::Backend::DefaultType` and `gfx::Backend::Create` for Skia builds.
+- [x] Add `cmake/skia.cmake` source/header wiring.
+- [x] Add public `skia::RendererBackend` declaration.
+- [x] Add public `skia::Context` declaration.
+- [x] Add prototype `skia::RendererBackend` implementation.
+- [x] Add prototype default `skia::Renderable` implementation.
+- [x] Add prototype `skia::Context` frame lifecycle implementation.
+- [x] Add prototype `skia::CommandEncoder` implementation.
+- [x] Add prototype `skia::RenderPass` implementation.
+- [x] Add prototype `skia::UploadPass` implementation.
+- [x] Add prototype CPU-backed `skia::Texture2D` placeholder.
+- [x] Add prototype CPU-backed `skia::UniformBuffer` placeholder.
+- [x] Add prototype `skia::UniformBufferArray` placeholder.
+- [x] Add prototype `skia::OffscreenTexture` placeholder.
+- [x] Add prototype `skia::DrawableBuilder` implementation.
+- [x] Add prototype `skia::Drawable` implementation.
+- [x] Add prototype `skia::LayerGroup` implementation.
+- [x] Add prototype `skia::TileLayerGroup` implementation.
+- [x] Verify scaffold `mbgl-core` configures with `MLN_WITH_SKIA=ON`.
+- [x] Verify scaffold `mbgl-core` builds with `MLN_WITH_SKIA=ON` and warnings as errors.
+- [x] Decide Skia dependency acquisition strategy for non-Windows builds.
+- [x] Add vendored Skia GN/Ninja build wiring.
+- [x] Add Skia dependency discovery and link wiring.
+- [x] Add Skia public/private include directories and compile definitions.
+- [x] Include real Skia headers for `SkSurface`, `SkCanvas`, `SkImage`, and `SkMesh`.
+- [x] Verify vendored Skia checkout and GN configure.
+- [x] Verify vendored Skia static library build.
+- [ ] Add Skia forward declarations or wrapper headers for `SkShader` and `SkMeshSpecification`.
+- [ ] Replace placeholder default renderable with a host-provided or owned `SkSurface` renderable.
+- [ ] Define Skia platform integration ownership model for default surfaces.
+- [ ] Implement Skia renderable resource binding around current frame surface/canvas.
+- [ ] Implement `CommandEncoder::present` flush and submit behavior for Skia surfaces.
+- [ ] Implement render pass canvas selection and clear color behavior.
+- [ ] Implement render pass depth/stencil clear handling or explicit no-op policy.
+- [ ] Implement upload pass texture upload path into `SkImage` or GPU texture-backed image objects.
+- [ ] Implement `Texture2D` image storage with `SkImage` snapshots.
+- [ ] Implement `Texture2D` sampler mapping to Skia sampling and tile modes.
+- [ ] Implement `Texture2D` subregion upload strategy.
+- [ ] Implement `DynamicTexture` behavior backed by Skia textures/images.
+- [ ] Implement offscreen texture as a GPU-backed `SkSurface` where available.
+- [ ] Implement offscreen texture snapshot to `Texture2D`.
+- [ ] Implement offscreen texture `readStillImage()` via `readPixels`.
+- [ ] Define Skia uniform byte layout and ownership model.
+- [ ] Implement uniform buffer copying into Skia mesh uniform data.
+- [ ] Implement global uniform buffer binding policy for Skia drawables.
+- [ ] Define Skia vertex attribute packing rules.
+- [ ] Implement MapLibre attribute type to Skia mesh attribute type mapping.
+- [ ] Implement vertex buffer packing for shared and override attributes.
+- [ ] Implement index buffer storage for Skia meshes.
+- [ ] Implement `SkMeshSpecification` creation cache keyed by shader and attribute layout.
+- [ ] Implement `SkMesh` creation for indexed triangle drawables.
+- [ ] Implement line draw mode handling or conversion policy.
+- [ ] Implement drawable draw path through `SkCanvas::drawMesh`.
+- [ ] Implement drawable texture child shader binding.
+- [ ] Implement drawable uniform binding.
+- [ ] Implement blend state mapping from `gfx::ColorMode` to Skia paint/blend configuration.
+- [ ] Implement cull-face support or document no-op behavior for 2D layers.
+- [ ] Implement depth mode support or document no-op/degraded behavior for 2D layers.
+- [ ] Implement tile clipping with Skia canvas clip stack.
+- [ ] Replace stencil tile clipping with Skia clip path/rect behavior in `TileLayerGroup`.
+- [ ] Implement debug group/signpost behavior with Skia tracing where available.
+- [ ] Add Skia shader program base type.
+- [ ] Add Skia shader group type.
+- [ ] Add Skia shader registration in `RendererBackend::initShaders`.
+- [ ] Port clipping mask shader behavior or remove stencil dependency from Skia path.
+- [ ] Port background solid shader/render path.
+- [ ] Port background pattern shader/render path.
+- [ ] Port fill solid shader/render path.
+- [ ] Port fill outline shader/render path.
+- [ ] Port fill pattern shader/render path.
+- [ ] Port raster shader/render path.
+- [ ] Pass basic background render tests.
+- [ ] Pass basic fill render tests.
+- [ ] Pass basic raster render tests.
+- [ ] Port line solid shader/render path.
+- [ ] Port line gradient shader/render path.
+- [ ] Port line pattern shader/render path.
+- [ ] Port line SDF shader/render path.
+- [ ] Pass line render tests.
+- [ ] Port circle shader/render path.
+- [ ] Pass circle render tests.
+- [ ] Port symbol icon shader/render path.
+- [ ] Port symbol SDF text shader/render path.
+- [ ] Port symbol text-and-icon shader/render path.
+- [ ] Pass symbol icon render tests.
+- [ ] Pass symbol text render tests.
+- [ ] Implement collision debug drawing.
+- [ ] Pass collision debug render tests.
+- [ ] Port heatmap accumulation pass.
+- [ ] Port heatmap colorization pass.
+- [ ] Pass heatmap render tests.
+- [ ] Port hillshade prepare pass.
+- [ ] Port hillshade render pass.
+- [ ] Pass hillshade render tests.
+- [ ] Port color relief shader/render path.
+- [ ] Pass color relief render tests.
+- [ ] Decide fill extrusion policy for Skia initial release.
+- [ ] Implement fill extrusion degradation to flat footprint if selected.
+- [ ] Document unsupported fill extrusion behavior if deferred.
+- [ ] Add headless Skia backend for render tests.
+- [ ] Add GLFW or platform sample integration for Skia backend.
+- [ ] Add Skia backend CI configure/build job.
+- [ ] Add Skia backend render-test job once output is meaningful.
+- [ ] Add targeted unit tests for texture upload and offscreen readback.
+- [ ] Add targeted unit tests for vertex attribute packing.
+- [ ] Add targeted unit tests for uniform buffer packing.
+- [ ] Add targeted unit tests for tile clipping behavior.
+- [ ] Profile tile-heavy styles against existing backends.
+- [ ] Profile text-heavy styles against existing backends.
+- [ ] Profile raster-heavy styles against existing backends.
+- [ ] Audit memory ownership and GPU resource cleanup.
+- [ ] Audit thread-safety assumptions around Skia contexts and surfaces.
+- [ ] Document platform integration requirements.
+- [ ] Document backend limitations and known divergences.
+- [ ] Remove placeholder no-op rendering once SkMesh path is active.
+- [ ] Remove temporary scaffold comments and dead code.
+- [ ] Reach parity target for initial 2D layer set.
+- [ ] Decide whether to graduate backend from experimental.

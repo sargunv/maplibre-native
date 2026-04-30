@@ -38,6 +38,7 @@ node_modules
 .cxx
 .env
 vendor/dawn/
+vendor/skia/
 
 # Node binaries.
 /lib

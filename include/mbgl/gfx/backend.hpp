@@ -15,12 +15,15 @@ public:
         Metal,    ///< The Metal API backend
         Vulkan,   ///< The Vulkan API backend
         WebGPU,   ///< The WebGPU API backend
+        Skia,     ///< The experimental Skia API backend
         TYPE_MAX, ///< Not a valid backend type, used to determine the number
                   ///< of available backends (ie for array allocation).
     };
 
 #if MLN_RENDER_BACKEND_WEBGPU
     static constexpr Type DefaultType = Type::WebGPU;
+#elif MLN_RENDER_BACKEND_SKIA
+    static constexpr Type DefaultType = Type::Skia;
 #elif MLN_RENDER_BACKEND_METAL
     static constexpr Type DefaultType = Type::Metal;
 #elif MLN_RENDER_BACKEND_VULKAN
@@ -44,6 +47,8 @@ public:
     static std::unique_ptr<T> Create(Args... args) {
 #if MLN_RENDER_BACKEND_WEBGPU
         return Create<Type::WebGPU, T, Args...>(std::forward<Args>(args)...);
+#elif MLN_RENDER_BACKEND_SKIA
+        return Create<Type::Skia, T, Args...>(std::forward<Args>(args)...);
 #elif MLN_RENDER_BACKEND_METAL
         return Create<Type::Metal, T, Args...>(std::forward<Args>(args)...);
 #elif MLN_RENDER_BACKEND_VULKAN
