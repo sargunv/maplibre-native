@@ -18,8 +18,11 @@
 #include <mbgl/util/image.hpp>
 
 #include <include/core/SkCanvas.h>
+#include <include/core/SkData.h>
 #include <include/core/SkImage.h>
+#include <include/core/SkImageInfo.h>
 #include <include/core/SkMesh.h>
+#include <include/core/SkPixmap.h>
 #include <include/core/SkSurface.h>
 
 #include <cstddef>
@@ -50,7 +53,15 @@ class DrawScopeResource final : public gfx::DrawScopeResource {};
 
 class RenderableResource final : public gfx::RenderableResource {
 public:
+    explicit RenderableResource(Size size);
     void bind() override {}
+
+    SkSurface* getSurface() const { return surface.get(); }
+    SkCanvas* getCanvas() const { return surface ? surface->getCanvas() : nullptr; }
+    void flush() const;
+
+private:
+    sk_sp<SkSurface> surface;
 };
 
 class Texture2D final : public gfx::Texture2D {
@@ -70,14 +81,17 @@ public:
     void uploadSubRegion(const void* pixelData, const Size& size_, uint16_t xOffset, uint16_t yOffset) override;
     void upload() override;
     bool needsUpload() const noexcept override;
+    void setImageSnapshot(sk_sp<SkImage> image_);
+    const sk_sp<SkImage>& getImage() const { return skImage; }
 
 private:
     SamplerState samplerState;
     gfx::TexturePixelType pixelFormat = gfx::TexturePixelType::RGBA;
     gfx::TextureChannelDataType channelType = gfx::TextureChannelDataType::UnsignedByte;
     Size size{0, 0};
-    std::shared_ptr<PremultipliedImage> image;
+    std::shared_ptr<PremultipliedImage> stagedImage;
     std::vector<std::uint8_t> pixels;
+    sk_sp<SkImage> skImage;
     bool dirty = false;
 };
 
@@ -107,13 +121,21 @@ public:
     const gfx::Texture2DPtr& getTexture() override;
 
 private:
+    RenderableResource& getSkiaResource() const;
     gfx::Texture2DPtr texture;
 };
 
 class RenderPass final : public gfx::RenderPass {
+public:
+    explicit RenderPass(gfx::Renderable& renderable, const gfx::RenderPassDescriptor& descriptor);
+    SkCanvas* getCanvas() const { return canvas; }
+
 protected:
     void pushDebugGroup(const char*) override {}
     void popDebugGroup() override {}
+
+private:
+    SkCanvas* canvas = nullptr;
 };
 
 class UploadPass final : public gfx::UploadPass {

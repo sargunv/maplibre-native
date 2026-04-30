@@ -32,20 +32,21 @@
 - [x] Verify vendored Skia checkout and GN configure.
 - [x] Verify vendored Skia static library build.
 - [ ] Add Skia forward declarations or wrapper headers for `SkShader` and `SkMeshSpecification`.
-- [ ] Replace placeholder default renderable with a host-provided or owned `SkSurface` renderable.
+- [x] Replace placeholder default renderable with a host-provided or owned `SkSurface` renderable.
 - [ ] Define Skia platform integration ownership model for default surfaces.
-- [ ] Implement Skia renderable resource binding around current frame surface/canvas.
-- [ ] Implement `CommandEncoder::present` flush and submit behavior for Skia surfaces.
-- [ ] Implement render pass canvas selection and clear color behavior.
+- [x] Implement Skia renderable resource binding around current frame surface/canvas.
+- [x] Implement `CommandEncoder::present` flush and submit behavior for Skia surfaces.
+- [x] Implement render pass canvas selection and clear color behavior.
 - [ ] Implement render pass depth/stencil clear handling or explicit no-op policy.
 - [ ] Implement upload pass texture upload path into `SkImage` or GPU texture-backed image objects.
-- [ ] Implement `Texture2D` image storage with `SkImage` snapshots.
+- [x] Implement `Texture2D` image storage with `SkImage` snapshots.
 - [ ] Implement `Texture2D` sampler mapping to Skia sampling and tile modes.
 - [ ] Implement `Texture2D` subregion upload strategy.
 - [ ] Implement `DynamicTexture` behavior backed by Skia textures/images.
+- [x] Implement offscreen texture as a raster `SkSurface` prototype.
+- [x] Implement offscreen texture snapshot to `Texture2D`.
+- [x] Implement offscreen texture `readStillImage()` via `readPixels`.
 - [ ] Implement offscreen texture as a GPU-backed `SkSurface` where available.
-- [ ] Implement offscreen texture snapshot to `Texture2D`.
-- [ ] Implement offscreen texture `readStillImage()` via `readPixels`.
 - [ ] Define Skia uniform byte layout and ownership model.
 - [ ] Implement uniform buffer copying into Skia mesh uniform data.
 - [ ] Implement global uniform buffer binding policy for Skia drawables.
@@ -65,9 +66,9 @@
 - [ ] Implement tile clipping with Skia canvas clip stack.
 - [ ] Replace stencil tile clipping with Skia clip path/rect behavior in `TileLayerGroup`.
 - [ ] Implement debug group/signpost behavior with Skia tracing where available.
-- [ ] Add Skia shader program base type.
-- [ ] Add Skia shader group type.
-- [ ] Add Skia shader registration in `RendererBackend::initShaders`.
+- [x] Add Skia shader program base type.
+- [x] Add Skia shader group type.
+- [x] Add Skia shader registration in `RendererBackend::initShaders`.
 - [ ] Port clipping mask shader behavior or remove stencil dependency from Skia path.
 - [ ] Port background solid shader/render path.
 - [ ] Port background pattern shader/render path.

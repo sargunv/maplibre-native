@@ -7,6 +7,37 @@
 namespace mbgl {
 namespace skia {
 
+namespace {
+
+SkImageInfo makeImageInfo(Size size, gfx::TexturePixelType pixelFormat, gfx::TextureChannelDataType channelType) {
+    const auto width = std::max(1, static_cast<int>(size.width));
+    const auto height = std::max(1, static_cast<int>(size.height));
+
+    if (pixelFormat == gfx::TexturePixelType::Alpha || pixelFormat == gfx::TexturePixelType::Luminance) {
+        return SkImageInfo::Make(width, height, kAlpha_8_SkColorType, kPremul_SkAlphaType);
+    }
+
+    const auto colorType = channelType == gfx::TextureChannelDataType::HalfFloat
+                               ? kRGBA_F16_SkColorType
+                               : (channelType == gfx::TextureChannelDataType::Float ? kRGBA_F32_SkColorType
+                                                                                    : kRGBA_8888_SkColorType);
+    return SkImageInfo::Make(width, height, colorType, kPremul_SkAlphaType);
+}
+
+SkColor4f toSkColor(const Color& color) {
+    return {color.r, color.g, color.b, color.a};
+}
+
+} // namespace
+
+RenderableResource::RenderableResource(Size size)
+    : surface(SkSurfaces::Raster(
+          makeImageInfo(size, gfx::TexturePixelType::RGBA, gfx::TextureChannelDataType::UnsignedByte))) {}
+
+void RenderableResource::flush() const {
+    // Raster surfaces do not require explicit submission. GPU-backed surfaces will flush here.
+}
+
 gfx::Texture2D& Texture2D::setSamplerConfiguration(const SamplerState& samplerState_) noexcept {
     samplerState = samplerState_;
     return *this;
@@ -25,8 +56,8 @@ gfx::Texture2D& Texture2D::setSize(Size size_) noexcept {
 }
 
 gfx::Texture2D& Texture2D::setImage(std::shared_ptr<PremultipliedImage> image_) noexcept {
-    image = std::move(image_);
-    dirty = static_cast<bool>(image);
+    stagedImage = std::move(image_);
+    dirty = static_cast<bool>(stagedImage);
     return *this;
 }
 
@@ -64,6 +95,12 @@ size_t Texture2D::numChannels() const noexcept {
 
 void Texture2D::create() {
     pixels.assign(getDataSize(), 0);
+    if (!pixels.empty()) {
+        SkPixmap pixmap(makeImageInfo(size, pixelFormat, channelType), pixels.data(), size.width * getPixelStride());
+        skImage = SkImages::RasterFromPixmapCopy(pixmap);
+    } else {
+        skImage.reset();
+    }
     dirty = false;
 }
 
@@ -73,6 +110,12 @@ void Texture2D::upload(const void* pixelData, const Size& size_) {
     pixels.resize(byteCount);
     if (pixelData && byteCount > 0) {
         std::memcpy(pixels.data(), pixelData, byteCount);
+    }
+    if (!pixels.empty()) {
+        SkPixmap pixmap(makeImageInfo(size, pixelFormat, channelType), pixels.data(), size.width * getPixelStride());
+        skImage = SkImages::RasterFromPixmapCopy(pixmap);
+    } else {
+        skImage.reset();
     }
     dirty = false;
 }
@@ -91,17 +134,29 @@ void Texture2D::uploadSubRegion(const void* pixelData, const Size& subSize, uint
             std::memcpy(pixels.data() + dstOffset, source + row * rowBytes, rowBytes);
         }
     }
+    if (!pixels.empty()) {
+        SkPixmap pixmap(makeImageInfo(size, pixelFormat, channelType), pixels.data(), size.width * getPixelStride());
+        skImage = SkImages::RasterFromPixmapCopy(pixmap);
+    }
 }
 
 void Texture2D::upload() {
-    if (image) {
-        upload(image->data ? image->data.get() : nullptr, image->size);
+    if (stagedImage) {
+        upload(stagedImage->data ? stagedImage->data.get() : nullptr, stagedImage->size);
     }
     dirty = false;
 }
 
 bool Texture2D::needsUpload() const noexcept {
     return dirty;
+}
+
+void Texture2D::setImageSnapshot(sk_sp<SkImage> image_) {
+    skImage = std::move(image_);
+    if (skImage) {
+        size = {static_cast<uint32_t>(skImage->width()), static_cast<uint32_t>(skImage->height())};
+    }
+    dirty = false;
 }
 
 UniformBuffer::UniformBuffer(const void* data, std::size_t size_)
@@ -122,7 +177,7 @@ std::unique_ptr<gfx::UniformBuffer> UniformBufferArray::copy(const gfx::UniformB
 }
 
 OffscreenTexture::OffscreenTexture(Size size_)
-    : gfx::OffscreenTexture(size_, std::make_unique<RenderableResource>()),
+    : gfx::OffscreenTexture(size_, std::make_unique<RenderableResource>(size_)),
       texture(std::make_shared<Texture2D>()) {
     texture->setSize(size_).create();
 }
@@ -132,11 +187,32 @@ bool OffscreenTexture::isRenderable() {
 }
 
 PremultipliedImage OffscreenTexture::readStillImage() {
-    return PremultipliedImage(size);
+    PremultipliedImage image(size);
+    auto& resource = getSkiaResource();
+    const auto info = makeImageInfo(size, gfx::TexturePixelType::RGBA, gfx::TextureChannelDataType::UnsignedByte);
+    if (resource.getSurface() && image.valid()) {
+        resource.getSurface()->readPixels(info, image.data.get(), image.stride(), 0, 0);
+    }
+    return image;
 }
 
 const gfx::Texture2DPtr& OffscreenTexture::getTexture() {
+    if (auto* surface = getSkiaResource().getSurface()) {
+        static_cast<Texture2D&>(*texture).setImageSnapshot(surface->makeImageSnapshot());
+    }
     return texture;
+}
+
+RenderableResource& OffscreenTexture::getSkiaResource() const {
+    return getResource<RenderableResource>();
+}
+
+RenderPass::RenderPass(gfx::Renderable& renderable, const gfx::RenderPassDescriptor& descriptor) {
+    auto& resource = renderable.getResource<RenderableResource>();
+    canvas = resource.getCanvas();
+    if (canvas && descriptor.clearColor) {
+        canvas->clear(toSkColor(*descriptor.clearColor));
+    }
 }
 
 } // namespace skia

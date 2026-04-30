@@ -16,6 +16,8 @@ list(APPEND
         INCLUDE_FILES
         ${PROJECT_SOURCE_DIR}/include/mbgl/skia/context.hpp
         ${PROJECT_SOURCE_DIR}/include/mbgl/skia/renderer_backend.hpp
+        ${PROJECT_SOURCE_DIR}/include/mbgl/shaders/skia/shader_group.hpp
+        ${PROJECT_SOURCE_DIR}/include/mbgl/shaders/skia/shader_program.hpp
 )
 
 list(APPEND
@@ -27,6 +29,7 @@ list(APPEND
         ${PROJECT_SOURCE_DIR}/src/mbgl/skia/layer_group.cpp
         ${PROJECT_SOURCE_DIR}/src/mbgl/skia/renderer_backend.cpp
         ${PROJECT_SOURCE_DIR}/src/mbgl/skia/resources.cpp
+        ${PROJECT_SOURCE_DIR}/src/mbgl/shaders/skia/shader_program.cpp
 )
 
 target_link_libraries(

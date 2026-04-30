@@ -65,7 +65,6 @@ set(_mln_skia_gn_args
     "is_component_build=false"
     "is_debug=${_mln_skia_is_debug}"
     "skia_enable_tools=false"
-    "skia_enable_gpu=${_mln_skia_enable_gpu}"
     "skia_enable_ganesh=${_mln_skia_enable_gpu}"
     "skia_enable_graphite=${_mln_skia_enable_gpu}"
     "skia_use_dawn=false"

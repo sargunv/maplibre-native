@@ -10,11 +10,14 @@ std::unique_ptr<gfx::UploadPass> CommandEncoder::createUploadPass(const char*, g
     return std::make_unique<UploadPass>(context);
 }
 
-std::unique_ptr<gfx::RenderPass> CommandEncoder::createRenderPass(const char*, const gfx::RenderPassDescriptor&) {
-    return std::make_unique<RenderPass>();
+std::unique_ptr<gfx::RenderPass> CommandEncoder::createRenderPass(const char*,
+                                                                  const gfx::RenderPassDescriptor& descriptor) {
+    return std::make_unique<RenderPass>(descriptor.renderable, descriptor);
 }
 
-void CommandEncoder::present(gfx::Renderable&) {}
+void CommandEncoder::present(gfx::Renderable& renderable) {
+    renderable.getResource<RenderableResource>().flush();
+}
 
 UploadPass::UploadPass(Context& context_)
     : context(context_) {}
