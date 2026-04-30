@@ -95,7 +95,7 @@
 - [ ] Port clipping mask shader behavior or remove stencil dependency from Skia path.
 - [ ] Port background solid shader/render path.
 - [ ] Port background pattern shader/render path.
-- [ ] Port fill solid shader/render path.
+- [x] Port fill solid shader/render path.
 - [ ] Port fill outline shader/render path.
 - [ ] Port fill pattern shader/render path.
 - [ ] Port raster shader/render path.

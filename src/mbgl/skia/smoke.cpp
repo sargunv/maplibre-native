@@ -3,6 +3,7 @@
 #include <include/core/SkBlender.h>
 #include <include/core/SkCanvas.h>
 #include <include/core/SkColor.h>
+#include <include/core/SkColorSpace.h>
 #include <include/core/SkData.h>
 #include <include/core/SkMesh.h>
 #include <include/core/SkPaint.h>
@@ -46,10 +47,12 @@ sk_sp<SkMeshSpecification> makeSpecification() {
     )");
 
     auto [specification, error] = SkMeshSpecification::Make(attributes,
-                                                            sizeof(Vertex),
-                                                            SkSpan<const SkMeshSpecification::Varying>(),
-                                                            vertexShader,
-                                                            fragmentShader);
+                                                             sizeof(Vertex),
+                                                             SkSpan<const SkMeshSpecification::Varying>(),
+                                                             vertexShader,
+                                                             fragmentShader,
+                                                             SkColorSpace::MakeSRGB(),
+                                                             kPremul_SkAlphaType);
     if (!specification) {
         std::cerr << "SkMeshSpecification failed: " << error.c_str() << "\n";
     }
@@ -137,7 +140,7 @@ int main(int argc, char** argv) {
 
     SkPaint paint;
     paint.setAntiAlias(true);
-    canvas->drawMesh(mesh.mesh, SkBlender::Mode(SkBlendMode::kSrcOver), paint);
+    canvas->drawMesh(mesh.mesh, SkBlender::Mode(SkBlendMode::kDst), paint);
     resource.flush();
 
     mbgl::PremultipliedImage image(size);
