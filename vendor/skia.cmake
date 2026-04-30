@@ -14,7 +14,7 @@ endif()
 include(ExternalProject)
 
 set(MLN_SKIA_GIT_VERSION "6b4167b4e2045e0bb559d903f4adea4b42dc6ccb" CACHE STRING "Git ref used when fetching Skia")
-set(MLN_SKIA_ENABLE_GPU OFF CACHE BOOL "Build Skia with Ganesh GPU backends enabled")
+set(MLN_SKIA_ENABLE_GPU ON CACHE BOOL "Build Skia with GPU backends enabled; required for SkMesh rendering")
 
 message(STATUS "Configuring Skia dependency (${MLN_SKIA_GIT_VERSION})")
 
@@ -34,6 +34,19 @@ endif()
 set(_mln_skia_enable_gpu "false")
 if(MLN_SKIA_ENABLE_GPU)
     set(_mln_skia_enable_gpu "true")
+endif()
+
+set(_mln_skia_use_metal "false")
+set(_mln_skia_use_vulkan "false")
+set(_mln_skia_use_gl "false")
+if(MLN_SKIA_ENABLE_GPU)
+    if(APPLE)
+        set(_mln_skia_use_metal "true")
+    elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" OR ANDROID)
+        set(_mln_skia_use_vulkan "true")
+    else()
+        set(_mln_skia_use_gl "true")
+    endif()
 endif()
 
 set(_mln_skia_target_cpu "")
@@ -68,9 +81,9 @@ set(_mln_skia_gn_args
     "skia_enable_ganesh=${_mln_skia_enable_gpu}"
     "skia_enable_graphite=${_mln_skia_enable_gpu}"
     "skia_use_dawn=false"
-    "skia_use_gl=${_mln_skia_enable_gpu}"
-    "skia_use_metal=false"
-    "skia_use_vulkan=false"
+    "skia_use_gl=${_mln_skia_use_gl}"
+    "skia_use_metal=${_mln_skia_use_metal}"
+    "skia_use_vulkan=${_mln_skia_use_vulkan}"
     "skia_use_fontconfig=false"
     "skia_use_freetype=false"
     "skia_use_harfbuzz=false"
@@ -143,3 +156,6 @@ target_include_directories(mbgl-vendor-skia
 )
 
 target_compile_definitions(mbgl-vendor-skia INTERFACE MLN_SKIA_HAS_VENDOR=1)
+if(MLN_SKIA_ENABLE_GPU)
+    target_compile_definitions(mbgl-vendor-skia INTERFACE MLN_SKIA_ENABLE_GPU=1)
+endif()
