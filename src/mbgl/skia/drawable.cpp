@@ -4,17 +4,21 @@
 #include <mbgl/shaders/background_layer_ubo.hpp>
 #include <mbgl/shaders/fill_layer_ubo.hpp>
 #include <mbgl/shaders/shader_defines.hpp>
-#include <mbgl/util/mat4.hpp>
 
+#include <include/core/SkBlender.h>
 #include <include/core/SkColor.h>
+#include <include/core/SkData.h>
+#include <include/core/SkMesh.h>
 #include <include/core/SkPaint.h>
-#include <include/core/SkPath.h>
-#include <include/core/SkPathBuilder.h>
+#include <include/core/SkRect.h>
+#include <include/core/SkString.h>
 
 #include <algorithm>
 #include <array>
-#include <cmath>
+#include <cstdint>
 #include <cstring>
+#include <limits>
+#include <vector>
 
 namespace mbgl {
 namespace skia {
@@ -36,6 +40,10 @@ struct VertexReader {
         y = static_cast<float>(xy[1]);
         return true;
     }
+};
+
+struct MeshVertex {
+    float position[2];
 };
 
 const UniformBuffer* getSkiaBuffer(const gfx::UniformBufferArray* uniforms, const std::size_t id) {
@@ -68,19 +76,59 @@ std::array<float, 16> identityMatrix() {
     return {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
 }
 
-Point<float> project(const std::array<float, 16>& matrix, const float x, const float y, const SkISize& size) {
-    const mat4 m = {matrix[0],  matrix[1],  matrix[2],  matrix[3],
-                    matrix[4],  matrix[5],  matrix[6],  matrix[7],
-                    matrix[8],  matrix[9],  matrix[10], matrix[11],
-                    matrix[12], matrix[13], matrix[14], matrix[15]};
-    vec4 out;
-    matrix::transformMat4(out, vec4{x, y, 0.0, 1.0}, m);
+sk_sp<SkMeshSpecification> solidColorMeshSpecification() {
+    static sk_sp<SkMeshSpecification> specification;
+    if (specification) {
+        return specification;
+    }
 
-    const auto w = out[3] == 0.0 ? 1.0 : out[3];
-    const auto ndcX = out[0] / w;
-    const auto ndcY = out[1] / w;
-    return {static_cast<float>((ndcX * 0.5 + 0.5) * size.width()),
-            static_cast<float>((0.5 - ndcY * 0.5) * size.height())};
+    using Attribute = SkMeshSpecification::Attribute;
+    const Attribute attributes[] = {{Attribute::Type::kFloat2, 0, SkString("a_pos")}};
+
+    const SkString vertexShader(R"(
+        uniform float4x4 u_matrix;
+        uniform float2 u_viewport;
+
+        Varyings main(const Attributes attrs) {
+            Varyings varyings;
+            float4 projected = u_matrix * float4(attrs.a_pos, 0.0, 1.0);
+            float inv_w = projected.w == 0.0 ? 1.0 : 1.0 / projected.w;
+            float2 ndc = projected.xy * inv_w;
+            varyings.position = float2((ndc.x * 0.5 + 0.5) * u_viewport.x,
+                                       (0.5 - ndc.y * 0.5) * u_viewport.y);
+            return varyings;
+        }
+    )");
+
+    const SkString fragmentShader(R"(
+        layout(color) uniform half4 u_color;
+
+        float2 main(const Varyings varyings, out half4 color) {
+            color = u_color;
+            return varyings.position;
+        }
+    )");
+
+    auto [spec, error] = SkMeshSpecification::Make(attributes,
+                                                   sizeof(MeshVertex),
+                                                   SkSpan<const SkMeshSpecification::Varying>(),
+                                                   vertexShader,
+                                                   fragmentShader);
+    (void)error;
+    specification = std::move(spec);
+    return specification;
+}
+
+void writeUniform(sk_sp<SkData>& uniforms,
+                  const SkMeshSpecification& specification,
+                  const char* name,
+                  const void* data,
+                  const std::size_t size) {
+    const auto* uniform = specification.findUniform(name);
+    if (!uniform || uniform->offset + size > uniforms->size()) {
+        return;
+    }
+    std::memcpy(static_cast<std::uint8_t*>(uniforms->writable_data()) + uniform->offset, data, size);
 }
 
 } // namespace
@@ -124,7 +172,8 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
     if (!vertices.empty() && vertexDataType == gfx::AttributeDataType::Short2) {
         vertexReader = VertexReader{vertices.data(), vertexCount, sizeof(std::int16_t) * 2};
     } else if (const auto& attrs = getVertexAttributes()) {
-        const auto& attr = attrs->get(positionAttributeId) ? attrs->get(positionAttributeId) : attrs->get(shaders::idFillPosVertexAttribute);
+        const auto& attr = attrs->get(positionAttributeId) ? attrs->get(positionAttributeId)
+                                                          : attrs->get(shaders::idFillPosVertexAttribute);
         if (attr && attr->getSharedRawData() && attr->getSharedType() == gfx::AttributeDataType::Short2) {
             const auto* raw = static_cast<const std::uint8_t*>(attr->getSharedRawData()->getRawData());
             vertexReader = VertexReader{raw + attr->getSharedOffset() + attr->getSharedVertexOffset() * attr->getSharedStride(),
@@ -138,34 +187,65 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
         return;
     }
 
-    SkPaint paint;
-    paint.setColor4f(color, nullptr);
-    paint.setAntiAlias(true);
+    const auto specification = solidColorMeshSpecification();
+    if (!specification) {
+        return;
+    }
+
+    if (vertexReader.count > std::numeric_limits<std::uint16_t>::max()) {
+        return;
+    }
+
+    std::vector<MeshVertex> meshVertices(vertexReader.count);
+    for (std::size_t i = 0; i < vertexReader.count; ++i) {
+        if (!vertexReader.read(static_cast<std::uint16_t>(i), meshVertices[i].position[0], meshVertices[i].position[1])) {
+            return;
+        }
+    }
+
+    const auto& indexes = sharedIndexes->vector();
+    const auto vertexBuffer = SkMeshes::MakeVertexBuffer(meshVertices.data(), meshVertices.size() * sizeof(MeshVertex));
+    const auto indexBuffer = SkMeshes::MakeIndexBuffer(indexes.data(), indexes.size() * sizeof(std::uint16_t));
+    if (!vertexBuffer || !indexBuffer) {
+        return;
+    }
 
     const auto canvasSize = canvas->getBaseLayerSize();
-    const auto& indexes = sharedIndexes->vector();
+    const float viewport[2] = {static_cast<float>(canvasSize.width()), static_cast<float>(canvasSize.height())};
+    const float uniformColor[4] = {color.fR, color.fG, color.fB, color.fA};
+
+    auto uniforms = SkData::MakeUninitialized(specification->uniformSize());
+    std::memset(uniforms->writable_data(), 0, uniforms->size());
+    writeUniform(uniforms, *specification, "u_matrix", matrix.data(), matrix.size() * sizeof(float));
+    writeUniform(uniforms, *specification, "u_viewport", viewport, sizeof(viewport));
+    writeUniform(uniforms, *specification, "u_color", uniformColor, sizeof(uniformColor));
+
+    SkPaint paint;
+    paint.setAntiAlias(true);
+
     for (const auto& segment : segments) {
         if (!segment || segment->getMode().type != gfx::DrawModeType::Triangles) {
             continue;
         }
         const auto& seg = segment->getSegment();
         const auto end = std::min(seg.indexOffset + seg.indexLength, indexes.size());
-        for (auto i = seg.indexOffset; i + 2 < end; i += 3) {
-            float x0, y0, x1, y1, x2, y2;
-            if (!vertexReader.read(indexes[i], x0, y0) || !vertexReader.read(indexes[i + 1], x1, y1) ||
-                !vertexReader.read(indexes[i + 2], x2, y2)) {
-                continue;
-            }
-            const auto p0 = project(matrix, x0, y0, canvasSize);
-            const auto p1 = project(matrix, x1, y1, canvasSize);
-            const auto p2 = project(matrix, x2, y2, canvasSize);
+        if (end <= seg.indexOffset) {
+            continue;
+        }
 
-            SkPathBuilder path;
-            path.moveTo(p0.x, p0.y);
-            path.lineTo(p1.x, p1.y);
-            path.lineTo(p2.x, p2.y);
-            path.close();
-            canvas->drawPath(path.detach(), paint);
+        const auto mesh = SkMesh::MakeIndexed(specification,
+                                              SkMesh::Mode::kTriangles,
+                                              vertexBuffer,
+                                              meshVertices.size(),
+                                              /*vertexOffset=*/0,
+                                              indexBuffer,
+                                              end - seg.indexOffset,
+                                              seg.indexOffset * sizeof(std::uint16_t),
+                                              uniforms,
+                                              SkSpan<SkMesh::ChildPtr>(),
+                                              SkRect::MakeWH(viewport[0], viewport[1]));
+        if (mesh.mesh.isValid()) {
+            canvas->drawMesh(mesh.mesh, SkBlender::Mode(SkBlendMode::kDst), paint);
         }
     }
 }

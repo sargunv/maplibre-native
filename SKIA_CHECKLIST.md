@@ -50,17 +50,16 @@
 - [ ] Define Skia uniform byte layout and ownership model.
 - [ ] Implement uniform buffer copying into Skia mesh uniform data.
 - [ ] Implement global uniform buffer binding policy for Skia drawables.
-- [ ] Define Skia vertex attribute packing rules.
+- [x] Define initial Skia vertex attribute packing rules for solid triangle meshes.
 - [ ] Implement MapLibre attribute type to Skia mesh attribute type mapping.
-- [ ] Implement vertex buffer packing for shared and override attributes.
-- [ ] Implement index buffer storage for Skia meshes.
-- [ ] Implement `SkMeshSpecification` creation cache keyed by shader and attribute layout.
-- [ ] Implement `SkMesh` creation for indexed triangle drawables.
+- [x] Implement initial vertex buffer packing for shared and raw `Short2` position attributes.
+- [x] Implement index buffer storage for Skia meshes.
+- [x] Implement initial `SkMeshSpecification` creation cache for solid color triangle meshes.
+- [x] Implement `SkMesh` creation for indexed triangle drawables.
 - [ ] Implement line draw mode handling or conversion policy.
-- [ ] Implement drawable draw path through `SkCanvas::drawMesh`.
-- [x] Implement initial CPU indexed triangle fallback through `SkCanvas::drawPath`.
+- [x] Implement drawable draw path through `SkCanvas::drawMesh`.
 - [ ] Implement drawable texture child shader binding.
-- [ ] Implement drawable uniform binding.
+- [x] Implement initial drawable uniform binding for matrix, viewport, and solid color.
 - [ ] Implement blend state mapping from `gfx::ColorMode` to Skia paint/blend configuration.
 - [ ] Implement cull-face support or document no-op behavior for 2D layers.
 - [ ] Implement depth mode support or document no-op/degraded behavior for 2D layers.
