@@ -1,7 +1,5 @@
 # Skia Rendering Backend Research
 
-This note maps MapLibre Native's current renderer abstractions to a hypothetical Skia rendering backend. It is research only; it does not propose implementing the backend in this branch.
-
 ## Summary
 
 A Skia backend would fit into the newer drawables architecture. It would not be a separate high-level map painter or a small adapter around individual style layers. It would be a full `gfx` backend beside OpenGL, Metal, Vulkan, and WebGPU.
