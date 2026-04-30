@@ -1,2 +1,37 @@
 [tools]
+bazel = "7.7.0"
 pixi = "latest"
+
+[tasks.skia-configure]
+description = "Configure the core Skia prototype build"
+run = "pixi run cmake -S . -B build-skia-gpu-default-check -G Ninja -DMLN_WITH_SKIA=ON -DMLN_WITH_CORE_ONLY=ON -DMLN_WITH_WERROR=ON -DCMAKE_BUILD_TYPE=Debug"
+
+[tasks.skia-build]
+description = "Build the core Skia prototype library"
+run = "pixi run cmake --build build-skia-gpu-default-check --target maplibre_skia"
+
+[tasks.skia-smoke]
+description = "Build and run the standalone Skia smoke test"
+run = [
+  "pixi run cmake --build build-skia-gpu-default-check --target mbgl-skia-smoke",
+  "./build-skia-gpu-default-check/mbgl-skia-smoke",
+]
+
+[tasks.skia-map-smoke]
+description = "Build and run the MapLibre Skia smoke test"
+run = [
+  "pixi run cmake --build build-skia-gpu-default-check --target mbgl-skia-map-smoke",
+  "./build-skia-gpu-default-check/mbgl-skia-map-smoke",
+]
+
+[tasks.skia-render-test-configure]
+description = "Configure the Skia render-test build"
+run = "pixi run cmake -S . -B build-skia-render-test -G Ninja -DMLN_WITH_SKIA=ON -DMLN_WITH_CORE_ONLY=OFF -DMLN_WITH_GLFW=OFF -DMLN_WITH_WERROR=ON -DCMAKE_BUILD_TYPE=Debug"
+
+[tasks.skia-render-test-build]
+description = "Build the Skia render-test runner"
+run = "pixi run cmake --build build-skia-render-test --target mbgl-render-test-runner"
+
+[tasks.skia-render-test]
+description = "Run Skia render tests; pass a regex filter after --"
+run = "./build-skia-render-test/mbgl-render-test-runner -p metrics/ios-metal-render-test-runner-style.json -f \"{{arg(name='filter', default='fill-color/default')}}\""

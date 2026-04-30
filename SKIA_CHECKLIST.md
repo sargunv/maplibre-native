@@ -93,19 +93,32 @@
 - [x] Add Skia shader group type.
 - [x] Add Skia shader registration in `RendererBackend::initShaders`.
 - [ ] Port clipping mask shader behavior or remove stencil dependency from Skia path.
-- [ ] Port background solid shader/render path.
+- [x] Port background solid shader/render path.
 - [ ] Port background pattern shader/render path.
 - [x] Port fill solid shader/render path.
 - [ ] Port fill outline shader/render path.
 - [ ] Port fill pattern shader/render path.
 - [ ] Port raster shader/render path.
-- [ ] Pass basic background render tests.
-- [ ] Pass basic fill render tests.
+- [x] Pass basic background render tests.
+- [x] Pass basic fill render tests.
 - [ ] Pass basic raster render tests.
-- [ ] Port line solid shader/render path.
-- [ ] Port line gradient shader/render path.
+- [x] Port line solid shader/render path.
+- [x] Port line solid color attribute path.
+- [x] Port line opacity attribute path.
+- [x] Port line width attribute path.
+- [x] Port line gap-width attribute path.
+- [x] Port line blur attribute path.
+- [x] Port line offset attribute path.
+- [x] Port line gradient shader/render path.
 - [ ] Port line pattern shader/render path.
 - [ ] Port line SDF shader/render path.
+- [x] Pass basic line color render tests.
+- [x] Pass basic line opacity render tests.
+- [x] Pass basic line width render tests.
+- [x] Pass basic line gap-width render tests.
+- [ ] Pass basic line blur render tests.
+- [ ] Pass basic line offset render tests.
+- [ ] Pass line gradient render tests.
 - [ ] Pass line render tests.
 - [ ] Port circle shader/render path.
 - [ ] Pass circle render tests.
@@ -143,6 +156,7 @@
 - [ ] Document platform integration requirements.
 - [ ] Document backend limitations and known divergences.
 - [ ] Remove placeholder no-op rendering once SkMesh path is active.
+- [ ] Remove temporary Skia smoke targets once render-test coverage is sufficient.
 - [ ] Remove temporary scaffold comments and dead code.
 - [ ] Reach parity target for initial 2D layer set.
 - [ ] Decide whether to graduate backend from experimental.

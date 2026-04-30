@@ -18,13 +18,12 @@ sk_sp<GrDirectContext> makeDefaultGaneshContext() {
 
     id<MTLCommandQueue> queue = [device newCommandQueue];
     if (!queue) {
-        [device release];
         return nullptr;
     }
 
     GrMtlBackendContext backendContext;
-    backendContext.fDevice.reset((__bridge GrMTLHandle)device);
-    backendContext.fQueue.reset((__bridge GrMTLHandle)queue);
+    backendContext.fDevice.retain((__bridge GrMTLHandle)device);
+    backendContext.fQueue.retain((__bridge GrMTLHandle)queue);
     return GrDirectContexts::MakeMetal(backendContext);
 #else
     return nullptr;

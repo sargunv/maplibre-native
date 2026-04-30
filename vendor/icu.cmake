@@ -44,7 +44,7 @@ if(NOT MSVC)
 endif()
 
 target_include_directories(
-    mbgl-vendor-icu SYSTEM
+    mbgl-vendor-icu BEFORE
     PUBLIC ${CMAKE_CURRENT_LIST_DIR}/icu/include
 )
 

@@ -1,5 +1,8 @@
 #include "skia_impl.hpp"
 
+#include <mbgl/gfx/drawable_tweaker.hpp>
+#include <mbgl/renderer/paint_parameters.hpp>
+
 namespace mbgl {
 namespace skia {
 
@@ -8,10 +11,20 @@ TileLayerGroup::TileLayerGroup(int32_t layerIndex, std::size_t initialCapacity, 
       uniformBuffers(std::make_unique<UniformBufferArray>()) {}
 
 void TileLayerGroup::render(RenderOrchestrator&, PaintParameters& parameters) {
+    if (!enabled || !getDrawableCount() || !parameters.renderPass) {
+        return;
+    }
+
     visitDrawables([&](gfx::Drawable& drawable) {
-        if (drawable.getEnabled()) {
-            static_cast<Drawable&>(drawable).draw(parameters, uniformBuffers.get());
+        if (!drawable.getEnabled() || !drawable.hasRenderPass(parameters.pass)) {
+            return;
         }
+
+        for (const auto& tweaker : drawable.getTweakers()) {
+            tweaker->execute(drawable, parameters);
+        }
+
+        static_cast<Drawable&>(drawable).draw(parameters, uniformBuffers.get());
     });
 }
 
@@ -28,10 +41,20 @@ LayerGroup::LayerGroup(int32_t layerIndex, std::size_t initialCapacity, std::str
       uniformBuffers(std::make_unique<UniformBufferArray>()) {}
 
 void LayerGroup::render(RenderOrchestrator&, PaintParameters& parameters) {
+    if (!enabled || !getDrawableCount() || !parameters.renderPass) {
+        return;
+    }
+
     visitDrawables([&](gfx::Drawable& drawable) {
-        if (drawable.getEnabled()) {
-            static_cast<Drawable&>(drawable).draw(parameters, uniformBuffers.get());
+        if (!drawable.getEnabled() || !drawable.hasRenderPass(parameters.pass)) {
+            return;
         }
+
+        for (const auto& tweaker : drawable.getTweakers()) {
+            tweaker->execute(drawable, parameters);
+        }
+
+        static_cast<Drawable&>(drawable).draw(parameters, uniformBuffers.get());
     });
 }
 
