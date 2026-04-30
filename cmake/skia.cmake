@@ -51,5 +51,26 @@ if(APPLE)
             "-framework Metal"
             "-framework QuartzCore"
             "-framework Foundation"
+            "-framework CoreGraphics"
+            "-framework CoreText"
     )
 endif()
+
+add_executable(
+        mbgl-skia-smoke
+        ${PROJECT_SOURCE_DIR}/src/mbgl/skia/smoke.cpp
+)
+
+target_link_libraries(
+        mbgl-skia-smoke
+        PRIVATE
+        mbgl-core
+)
+
+target_include_directories(
+        mbgl-skia-smoke
+        PRIVATE
+        ${PROJECT_SOURCE_DIR}/src
+)
+
+set_property(TARGET mbgl-skia-smoke PROPERTY FOLDER MapLibre)

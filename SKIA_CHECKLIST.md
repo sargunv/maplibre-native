@@ -77,6 +77,8 @@
 - [ ] Implement line draw mode handling or conversion policy.
 - [x] Implement drawable draw path through `SkCanvas::drawMesh`.
 - [ ] Verify `SkCanvas::drawMesh` output on GPU-backed Skia surfaces.
+- [x] Add GPU SkMesh smoke executable that writes a visible image artifact.
+- [x] Verify GPU SkMesh smoke executable produces an image artifact on macOS Metal.
 - [ ] Implement drawable texture child shader binding.
 - [x] Implement initial drawable uniform binding for matrix, viewport, and solid color.
 - [ ] Implement blend state mapping from `gfx::ColorMode` to Skia paint/blend configuration.
