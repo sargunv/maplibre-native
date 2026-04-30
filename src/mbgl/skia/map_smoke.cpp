@@ -5,6 +5,8 @@
 #include <mbgl/style/layer.hpp>
 #include <mbgl/style/layers/background_layer.hpp>
 #include <mbgl/style/light.hpp>
+#include <mbgl/style/source.hpp>
+#include <mbgl/style/sources/geojson_source.hpp>
 #include <mbgl/renderer/update_parameters.hpp>
 #include <mbgl/util/chrono.hpp>
 #include <mbgl/util/color.hpp>
@@ -39,6 +41,23 @@ bool writePPM(const std::string& path, const mbgl::PremultipliedImage& image) {
     return stream.good();
 }
 
+bool hasVisibleColor(const mbgl::PremultipliedImage& image) {
+    if (!image.valid()) {
+        return false;
+    }
+
+    for (uint32_t y = 0; y < image.size.height; ++y) {
+        const auto* row = image.data.get() + y * image.stride();
+        for (uint32_t x = 0; x < image.size.width; ++x) {
+            const auto* pixel = row + x * 4;
+            if (pixel[0] != 0 || pixel[1] != 0 || pixel[2] != 0) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -60,6 +79,11 @@ int main(int argc, char** argv) {
     auto layers = mbgl::makeMutable<std::vector<mbgl::Immutable<mbgl::style::Layer::Impl>>>();
     layers->emplace_back(background.baseImpl);
 
+    mbgl::style::GeoJSONSource source("empty");
+    source.setGeoJSON(mbgl::FeatureCollection{});
+    auto sources = mbgl::makeMutable<std::vector<mbgl::Immutable<mbgl::style::Source::Impl>>>();
+    sources->emplace_back(source.baseImpl);
+
     mbgl::style::Light light;
     auto updateParameters = std::make_shared<mbgl::UpdateParameters>(mbgl::UpdateParameters{
         true,
@@ -74,7 +98,7 @@ int main(int argc, char** argv) {
         mbgl::style::TransitionOptions{},
         light.impl,
         mbgl::makeMutable<std::vector<mbgl::Immutable<mbgl::style::Image::Impl>>>(),
-        mbgl::makeMutable<std::vector<mbgl::Immutable<mbgl::style::Source::Impl>>>(),
+        std::move(sources),
         std::move(layers),
         {},
         nullptr,
@@ -88,6 +112,11 @@ int main(int argc, char** argv) {
     const auto image = backend.readStillImage();
     if (!image.valid()) {
         std::cerr << "MapLibre Skia render did not produce an image\n";
+        return EXIT_FAILURE;
+    }
+
+    if (!hasVisibleColor(image)) {
+        std::cerr << "MapLibre Skia render produced an all-black image\n";
         return EXIT_FAILURE;
     }
 

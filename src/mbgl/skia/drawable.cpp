@@ -250,7 +250,7 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
                                               SkSpan<SkMesh::ChildPtr>(),
                                               SkRect::MakeWH(viewport[0], viewport[1]));
         if (mesh.mesh.isValid()) {
-            canvas->drawMesh(mesh.mesh, SkBlender::Mode(SkBlendMode::kDst), paint);
+            canvas->drawMesh(mesh.mesh, SkBlender::Mode(SkBlendMode::kSrcOver), paint);
         }
     }
 }

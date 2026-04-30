@@ -137,7 +137,7 @@ int main(int argc, char** argv) {
 
     SkPaint paint;
     paint.setAntiAlias(true);
-    canvas->drawMesh(mesh.mesh, SkBlender::Mode(SkBlendMode::kDst), paint);
+    canvas->drawMesh(mesh.mesh, SkBlender::Mode(SkBlendMode::kSrcOver), paint);
     resource.flush();
 
     mbgl::PremultipliedImage image(size);

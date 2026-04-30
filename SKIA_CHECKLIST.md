@@ -79,8 +79,8 @@
 - [x] Verify `SkCanvas::drawMesh` output on GPU-backed Skia surfaces.
 - [x] Add GPU SkMesh smoke executable that writes a visible image artifact.
 - [x] Verify GPU SkMesh smoke executable produces an image artifact on macOS Metal.
-- [x] Add MapLibre `Renderer` Skia smoke executable that writes a visible image artifact.
-- [x] Verify MapLibre `Renderer` Skia smoke executable produces an image artifact on macOS Metal.
+- [x] Add MapLibre `Renderer` Skia smoke executable.
+- [x] Verify MapLibre `Renderer` Skia smoke executable produces a non-black image artifact on macOS Metal.
 - [ ] Implement drawable texture child shader binding.
 - [x] Implement initial drawable uniform binding for matrix, viewport, and solid color.
 - [ ] Implement blend state mapping from `gfx::ColorMode` to Skia paint/blend configuration.
@@ -93,7 +93,7 @@
 - [x] Add Skia shader group type.
 - [x] Add Skia shader registration in `RendererBackend::initShaders`.
 - [ ] Port clipping mask shader behavior or remove stencil dependency from Skia path.
-- [x] Port background solid shader/render path.
+- [ ] Port background solid shader/render path.
 - [ ] Port background pattern shader/render path.
 - [ ] Port fill solid shader/render path.
 - [ ] Port fill outline shader/render path.
