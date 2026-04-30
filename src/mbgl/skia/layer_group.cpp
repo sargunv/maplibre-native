@@ -10,7 +10,7 @@ TileLayerGroup::TileLayerGroup(int32_t layerIndex, std::size_t initialCapacity, 
 void TileLayerGroup::render(RenderOrchestrator&, PaintParameters& parameters) {
     visitDrawables([&](gfx::Drawable& drawable) {
         if (drawable.getEnabled()) {
-            drawable.draw(parameters);
+            static_cast<Drawable&>(drawable).draw(parameters, uniformBuffers.get());
         }
     });
 }
@@ -30,7 +30,7 @@ LayerGroup::LayerGroup(int32_t layerIndex, std::size_t initialCapacity, std::str
 void LayerGroup::render(RenderOrchestrator&, PaintParameters& parameters) {
     visitDrawables([&](gfx::Drawable& drawable) {
         if (drawable.getEnabled()) {
-            drawable.draw(parameters);
+            static_cast<Drawable&>(drawable).draw(parameters, uniformBuffers.get());
         }
     });
 }

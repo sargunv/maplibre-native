@@ -58,6 +58,7 @@
 - [ ] Implement `SkMesh` creation for indexed triangle drawables.
 - [ ] Implement line draw mode handling or conversion policy.
 - [ ] Implement drawable draw path through `SkCanvas::drawMesh`.
+- [x] Implement initial CPU indexed triangle fallback through `SkCanvas::drawPath`.
 - [ ] Implement drawable texture child shader binding.
 - [ ] Implement drawable uniform binding.
 - [ ] Implement blend state mapping from `gfx::ColorMode` to Skia paint/blend configuration.

@@ -5,6 +5,7 @@
 #include <mbgl/gfx/drawable_builder.hpp>
 #include <mbgl/gfx/dynamic_texture.hpp>
 #include <mbgl/gfx/index_buffer.hpp>
+#include <mbgl/gfx/index_vector.hpp>
 #include <mbgl/gfx/offscreen_texture.hpp>
 #include <mbgl/gfx/render_pass.hpp>
 #include <mbgl/gfx/renderbuffer.hpp>
@@ -12,6 +13,7 @@
 #include <mbgl/gfx/uniform_buffer.hpp>
 #include <mbgl/gfx/upload_pass.hpp>
 #include <mbgl/gfx/vertex_attribute.hpp>
+#include <mbgl/gfx/vertex_vector.hpp>
 #include <mbgl/gfx/vertex_buffer.hpp>
 #include <mbgl/renderer/layer_group.hpp>
 #include <mbgl/skia/context.hpp>
@@ -195,6 +197,7 @@ class Drawable final : public gfx::Drawable {
 public:
     explicit Drawable(std::string name);
     void draw(PaintParameters&) const override;
+    void draw(PaintParameters&, const gfx::UniformBufferArray* layerUniforms) const;
     void updateVertexAttributes(gfx::VertexAttributeArrayPtr,
                                 std::size_t vertexCount,
                                 gfx::DrawMode,
@@ -203,6 +206,7 @@ public:
                                 std::size_t segmentCount) override;
     void setVertices(std::vector<std::uint8_t>&&, std::size_t, gfx::AttributeDataType) override;
     void setIndexData(gfx::IndexVectorBasePtr, std::vector<UniqueDrawSegment>) override;
+    void setVertexAttrId(std::size_t id) { positionAttributeId = id; }
     const gfx::UniformBufferArray& getUniformBuffers() const override;
     gfx::UniformBufferArray& mutableUniformBuffers() override;
 
@@ -211,6 +215,9 @@ private:
     gfx::IndexVectorBasePtr sharedIndexes;
     std::vector<UniqueDrawSegment> segments;
     std::vector<std::uint8_t> vertices;
+    std::size_t vertexCount = 0;
+    gfx::AttributeDataType vertexDataType = gfx::AttributeDataType::Invalid;
+    std::size_t positionAttributeId = 0;
 };
 
 class DrawableBuilder final : public gfx::DrawableBuilder {
