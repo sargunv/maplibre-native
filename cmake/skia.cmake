@@ -26,6 +26,7 @@ list(APPEND
         ${PROJECT_SOURCE_DIR}/src/mbgl/skia/context.cpp
         ${PROJECT_SOURCE_DIR}/src/mbgl/skia/drawable.cpp
         ${PROJECT_SOURCE_DIR}/src/mbgl/skia/drawable_builder.cpp
+        ${PROJECT_SOURCE_DIR}/src/mbgl/skia/headless_backend.cpp
         ${PROJECT_SOURCE_DIR}/src/mbgl/skia/renderer_backend.cpp
         ${PROJECT_SOURCE_DIR}/src/mbgl/skia/layer_group.cpp
         ${PROJECT_SOURCE_DIR}/src/mbgl/skia/resources.cpp
@@ -42,6 +43,12 @@ target_link_libraries(
         mbgl-core
         PUBLIC
         mbgl-vendor-skia
+)
+
+target_include_directories(
+        mbgl-core
+        PRIVATE
+        ${PROJECT_SOURCE_DIR}/platform/default/include
 )
 
 if(APPLE)
@@ -61,6 +68,40 @@ add_executable(
         ${PROJECT_SOURCE_DIR}/src/mbgl/skia/smoke.cpp
 )
 
+add_executable(
+        mbgl-skia-map-smoke
+        ${PROJECT_SOURCE_DIR}/src/mbgl/skia/map_smoke.cpp
+        ${PROJECT_SOURCE_DIR}/platform/default/src/mbgl/gfx/headless_backend.cpp
+        ${PROJECT_SOURCE_DIR}/platform/default/src/mbgl/i18n/collator.cpp
+        ${PROJECT_SOURCE_DIR}/platform/default/src/mbgl/i18n/number_format.cpp
+        ${PROJECT_SOURCE_DIR}/platform/default/src/mbgl/layermanager/layer_manager.cpp
+        ${PROJECT_SOURCE_DIR}/platform/default/src/mbgl/platform/time.cpp
+        ${PROJECT_SOURCE_DIR}/platform/default/src/mbgl/text/bidi.cpp
+        ${PROJECT_SOURCE_DIR}/platform/default/src/mbgl/text/local_glyph_rasterizer.cpp
+        ${PROJECT_SOURCE_DIR}/platform/default/src/mbgl/util/async_task.cpp
+        ${PROJECT_SOURCE_DIR}/platform/default/src/mbgl/util/image.cpp
+        ${PROJECT_SOURCE_DIR}/platform/default/src/mbgl/util/jpeg_reader.cpp
+        ${PROJECT_SOURCE_DIR}/platform/default/src/mbgl/util/logging_stderr.cpp
+        ${PROJECT_SOURCE_DIR}/platform/default/src/mbgl/util/monotonic_timer.cpp
+        ${PROJECT_SOURCE_DIR}/platform/default/src/mbgl/util/png_reader.cpp
+        ${PROJECT_SOURCE_DIR}/platform/default/src/mbgl/util/run_loop.cpp
+        ${PROJECT_SOURCE_DIR}/platform/default/src/mbgl/util/string_stdlib.cpp
+        ${PROJECT_SOURCE_DIR}/platform/default/src/mbgl/util/thread.cpp
+        ${PROJECT_SOURCE_DIR}/platform/default/src/mbgl/util/thread_local.cpp
+        ${PROJECT_SOURCE_DIR}/platform/default/src/mbgl/util/timer.cpp
+        ${PROJECT_SOURCE_DIR}/platform/default/src/mbgl/util/utf.cpp
+        ${PROJECT_SOURCE_DIR}/platform/default/src/mbgl/util/webp_reader.cpp
+        ${PROJECT_SOURCE_DIR}/vendor/nunicode/src/libnu/ducet.c
+        ${PROJECT_SOURCE_DIR}/vendor/nunicode/src/libnu/strcoll.c
+        ${PROJECT_SOURCE_DIR}/vendor/nunicode/src/libnu/strings.c
+        ${PROJECT_SOURCE_DIR}/vendor/nunicode/src/libnu/tolower.c
+        ${PROJECT_SOURCE_DIR}/vendor/nunicode/src/libnu/tounaccent.c
+        ${PROJECT_SOURCE_DIR}/vendor/nunicode/src/libnu/toupper.c
+        ${PROJECT_SOURCE_DIR}/vendor/nunicode/src/libnu/utf8.c
+)
+
+get_target_property(MLN_SKIA_MAP_SMOKE_PRIVATE_LIBRARIES mbgl-core LINK_LIBRARIES)
+
 target_link_libraries(
         mbgl-skia-smoke
         PRIVATE
@@ -73,4 +114,34 @@ target_include_directories(
         ${PROJECT_SOURCE_DIR}/src
 )
 
+target_link_libraries(
+        mbgl-skia-map-smoke
+        PRIVATE
+        ${MLN_SKIA_MAP_SMOKE_PRIVATE_LIBRARIES}
+        mbgl-compiler-options
+        mbgl-core
+        uv
+        icui18n
+        icuuc
+        icudata
+        png
+        jpeg
+        webp
+)
+
+target_include_directories(
+        mbgl-skia-map-smoke
+        PRIVATE
+        ${PROJECT_SOURCE_DIR}/src
+        ${PROJECT_SOURCE_DIR}/platform/default/include
+        ${PROJECT_SOURCE_DIR}/vendor/nunicode/include
+)
+
+target_compile_definitions(
+        mbgl-skia-map-smoke
+        PRIVATE
+        NU_BUILD_STATIC
+)
+
 set_property(TARGET mbgl-skia-smoke PROPERTY FOLDER MapLibre)
+set_property(TARGET mbgl-skia-map-smoke PROPERTY FOLDER MapLibre)

@@ -27,11 +27,13 @@ void setCurrentThreadName(const std::string& name) {
     } else {
         pthread_setname_np(pthread_self(), name.c_str());
     }
+#else
+    (void)name;
 #endif
 }
 
 void makeThreadLowPriority() {
-#ifdef SCHED_IDLE
+#if defined(__linux__) && defined(SCHED_IDLE)
     struct sched_param param;
     param.sched_priority = 0;
 
@@ -46,7 +48,7 @@ void setCurrentThreadPriority(double priority) {
         Log::Warning(Event::General, "Couldn't set thread priority");
     }
 
-#ifdef SCHED_OTHER
+#if defined(__linux__) && defined(SCHED_OTHER)
     struct sched_param param;
     param.sched_priority = 0;
     if (sched_setscheduler(0, SCHED_OTHER, &param) != 0) {

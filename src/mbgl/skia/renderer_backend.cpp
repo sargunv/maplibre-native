@@ -16,6 +16,16 @@ namespace skia {
 Renderable::Renderable(Size size_, GrDirectContext* directContext)
     : gfx::Renderable(size_, std::make_unique<RenderableResource>(size_, directContext)) {}
 
+PremultipliedImage Renderable::readStillImage() const {
+    PremultipliedImage image(size);
+    const auto& resource = getResource<RenderableResource>();
+    const auto info = SkImageInfo::Make(size.width, size.height, kRGBA_8888_SkColorType, kPremul_SkAlphaType);
+    if (resource.getSurface() && image.valid()) {
+        resource.getSurface()->readPixels(info, image.data.get(), image.stride(), 0, 0);
+    }
+    return image;
+}
+
 RendererBackend::RendererBackend(Size size, gfx::ContextMode contextMode)
     : gfx::RendererBackend(contextMode),
       directContext(makeDefaultGaneshContext()),
@@ -29,6 +39,10 @@ gfx::Renderable& RendererBackend::getDefaultRenderable() {
 
 GrDirectContext* RendererBackend::getDirectContext() const {
     return directContext.get();
+}
+
+PremultipliedImage RendererBackend::readStillImage() const {
+    return defaultRenderable.readStillImage();
 }
 
 namespace {

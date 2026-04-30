@@ -76,9 +76,11 @@
 - [x] Implement `SkMesh` creation for indexed triangle drawables.
 - [ ] Implement line draw mode handling or conversion policy.
 - [x] Implement drawable draw path through `SkCanvas::drawMesh`.
-- [ ] Verify `SkCanvas::drawMesh` output on GPU-backed Skia surfaces.
+- [x] Verify `SkCanvas::drawMesh` output on GPU-backed Skia surfaces.
 - [x] Add GPU SkMesh smoke executable that writes a visible image artifact.
 - [x] Verify GPU SkMesh smoke executable produces an image artifact on macOS Metal.
+- [x] Add MapLibre `Renderer` Skia smoke executable that writes a visible image artifact.
+- [x] Verify MapLibre `Renderer` Skia smoke executable produces an image artifact on macOS Metal.
 - [ ] Implement drawable texture child shader binding.
 - [x] Implement initial drawable uniform binding for matrix, viewport, and solid color.
 - [ ] Implement blend state mapping from `gfx::ColorMode` to Skia paint/blend configuration.
@@ -91,7 +93,7 @@
 - [x] Add Skia shader group type.
 - [x] Add Skia shader registration in `RendererBackend::initShaders`.
 - [ ] Port clipping mask shader behavior or remove stencil dependency from Skia path.
-- [ ] Port background solid shader/render path.
+- [x] Port background solid shader/render path.
 - [ ] Port background pattern shader/render path.
 - [ ] Port fill solid shader/render path.
 - [ ] Port fill outline shader/render path.
@@ -125,7 +127,7 @@
 - [ ] Decide fill extrusion policy for Skia initial release.
 - [ ] Implement fill extrusion degradation to flat footprint if selected.
 - [ ] Document unsupported fill extrusion behavior if deferred.
-- [ ] Add headless Skia backend for render tests.
+- [x] Add headless Skia backend for render tests.
 - [ ] Add GLFW or platform sample integration for Skia backend.
 - [ ] Add Skia backend CI configure/build job.
 - [ ] Add Skia backend render-test job once output is meaningful.
