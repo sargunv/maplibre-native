@@ -13,17 +13,22 @@
 namespace mbgl {
 namespace skia {
 
-Renderable::Renderable(Size size_)
-    : gfx::Renderable(size_, std::make_unique<RenderableResource>(size_)) {}
+Renderable::Renderable(Size size_, GrDirectContext* directContext)
+    : gfx::Renderable(size_, std::make_unique<RenderableResource>(size_, directContext)) {}
 
 RendererBackend::RendererBackend(Size size, gfx::ContextMode contextMode)
     : gfx::RendererBackend(contextMode),
-      defaultRenderable(size) {}
+      directContext(makeDefaultGaneshContext()),
+      defaultRenderable(size, directContext.get()) {}
 
 RendererBackend::~RendererBackend() = default;
 
 gfx::Renderable& RendererBackend::getDefaultRenderable() {
     return defaultRenderable;
+}
+
+GrDirectContext* RendererBackend::getDirectContext() const {
+    return directContext.get();
 }
 
 namespace {

@@ -3,12 +3,15 @@
 #include <mbgl/gfx/renderable.hpp>
 #include <mbgl/gfx/renderer_backend.hpp>
 
+#include <include/core/SkRefCnt.h>
+#include <include/gpu/ganesh/GrDirectContext.h>
+
 namespace mbgl {
 namespace skia {
 
 class Renderable final : public gfx::Renderable {
 public:
-    explicit Renderable(Size size_);
+    explicit Renderable(Size size_, GrDirectContext* directContext = nullptr);
 };
 
 class RendererBackend final : public gfx::RendererBackend {
@@ -18,6 +21,7 @@ public:
 
     gfx::Renderable& getDefaultRenderable() override;
     void initShaders(gfx::ShaderRegistry&, const ProgramParameters&) override;
+    GrDirectContext* getDirectContext() const;
 
 protected:
     std::unique_ptr<gfx::Context> createContext() override;
@@ -25,6 +29,7 @@ protected:
     void deactivate() override;
 
 private:
+    sk_sp<GrDirectContext> directContext;
     Renderable defaultRenderable;
 };
 

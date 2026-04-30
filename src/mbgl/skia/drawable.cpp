@@ -1,6 +1,7 @@
 #include "skia_impl.hpp"
 
 #include <mbgl/renderer/paint_parameters.hpp>
+#include <mbgl/skia/renderer_backend.hpp>
 #include <mbgl/shaders/background_layer_ubo.hpp>
 #include <mbgl/shaders/fill_layer_ubo.hpp>
 #include <mbgl/shaders/shader_defines.hpp>
@@ -12,6 +13,7 @@
 #include <include/core/SkPaint.h>
 #include <include/core/SkRect.h>
 #include <include/core/SkString.h>
+#include <include/gpu/ganesh/SkMeshGanesh.h>
 
 #include <algorithm>
 #include <array>
@@ -203,9 +205,12 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
         }
     }
 
+    auto* directContext = static_cast<RendererBackend&>(parameters.backend).getDirectContext();
     const auto& indexes = sharedIndexes->vector();
-    const auto vertexBuffer = SkMeshes::MakeVertexBuffer(meshVertices.data(), meshVertices.size() * sizeof(MeshVertex));
-    const auto indexBuffer = SkMeshes::MakeIndexBuffer(indexes.data(), indexes.size() * sizeof(std::uint16_t));
+    const auto vertexBuffer = SkMeshes::MakeVertexBuffer(directContext,
+                                                         meshVertices.data(),
+                                                         meshVertices.size() * sizeof(MeshVertex));
+    const auto indexBuffer = SkMeshes::MakeIndexBuffer(directContext, indexes.data(), indexes.size() * sizeof(std::uint16_t));
     if (!vertexBuffer || !indexBuffer) {
         return;
     }

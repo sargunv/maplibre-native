@@ -2,6 +2,9 @@
 
 #include <mbgl/util/size.hpp>
 
+#include <include/gpu/ganesh/GrDirectContext.h>
+#include <include/gpu/ganesh/SkSurfaceGanesh.h>
+
 #include <algorithm>
 
 namespace mbgl {
@@ -30,12 +33,18 @@ SkColor4f toSkColor(const Color& color) {
 
 } // namespace
 
-RenderableResource::RenderableResource(Size size)
-    : surface(SkSurfaces::Raster(
-          makeImageInfo(size, gfx::TexturePixelType::RGBA, gfx::TextureChannelDataType::UnsignedByte))) {}
+RenderableResource::RenderableResource(Size size, GrDirectContext* directContext) {
+    const auto info = makeImageInfo(size, gfx::TexturePixelType::RGBA, gfx::TextureChannelDataType::UnsignedByte);
+    if (directContext) {
+        surface = SkSurfaces::RenderTarget(directContext, skgpu::Budgeted::kNo, info, 0, kTopLeft_GrSurfaceOrigin, nullptr);
+    }
+    if (!surface) {
+        surface = SkSurfaces::Raster(info);
+    }
+}
 
 void RenderableResource::flush() const {
-    // Raster surfaces do not require explicit submission. GPU-backed surfaces will flush here.
+    skgpu::ganesh::FlushAndSubmit(surface);
 }
 
 gfx::Texture2D& Texture2D::setSamplerConfiguration(const SamplerState& samplerState_) noexcept {
@@ -176,8 +185,8 @@ std::unique_ptr<gfx::UniformBuffer> UniformBufferArray::copy(const gfx::UniformB
     return std::make_unique<UniformBuffer>(nullptr, uniformBuffer.getSize());
 }
 
-OffscreenTexture::OffscreenTexture(Size size_)
-    : gfx::OffscreenTexture(size_, std::make_unique<RenderableResource>(size_)),
+OffscreenTexture::OffscreenTexture(Size size_, GrDirectContext* directContext)
+    : gfx::OffscreenTexture(size_, std::make_unique<RenderableResource>(size_, directContext)),
       texture(std::make_shared<Texture2D>()) {
     texture->setSize(size_).create();
 }

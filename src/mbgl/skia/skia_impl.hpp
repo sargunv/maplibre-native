@@ -32,8 +32,12 @@
 #include <cstring>
 #include <vector>
 
+class GrDirectContext;
+
 namespace mbgl {
 namespace skia {
+
+sk_sp<GrDirectContext> makeDefaultGaneshContext();
 
 class BufferResource final : public gfx::VertexBufferResource, public gfx::IndexBufferResource {
 public:
@@ -55,7 +59,7 @@ class DrawScopeResource final : public gfx::DrawScopeResource {};
 
 class RenderableResource final : public gfx::RenderableResource {
 public:
-    explicit RenderableResource(Size size);
+    RenderableResource(Size size, GrDirectContext* directContext = nullptr);
     void bind() override {}
 
     SkSurface* getSurface() const { return surface.get(); }
@@ -117,7 +121,7 @@ protected:
 
 class OffscreenTexture final : public gfx::OffscreenTexture {
 public:
-    explicit OffscreenTexture(Size size_);
+    OffscreenTexture(Size size_, GrDirectContext* directContext = nullptr);
     bool isRenderable() override;
     PremultipliedImage readStillImage() override;
     const gfx::Texture2DPtr& getTexture() override;

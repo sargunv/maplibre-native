@@ -24,7 +24,7 @@ void Context::performCleanup() {}
 void Context::reduceMemoryUsage() {}
 
 std::unique_ptr<gfx::OffscreenTexture> Context::createOffscreenTexture(Size size, gfx::TextureChannelDataType) {
-    return std::make_unique<OffscreenTexture>(size);
+    return std::make_unique<OffscreenTexture>(size, backend.getDirectContext());
 }
 
 std::unique_ptr<gfx::CommandEncoder> Context::createCommandEncoder() {

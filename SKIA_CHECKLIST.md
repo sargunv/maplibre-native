@@ -31,7 +31,7 @@
 - [x] Make Skia GPU support the default vendored build mode.
 - [ ] Require or clearly gate Skia runtime initialization when GPU support is unavailable.
 - [ ] Add platform GPU backend selection policy for Metal, Vulkan, and GL.
-- [ ] Verify vendored Skia GPU library build on macOS Metal.
+- [x] Verify vendored Skia GPU library build on macOS Metal.
 - [ ] Verify vendored Skia GPU library build on Linux/Android Vulkan.
 - [ ] Verify vendored Skia GPU library build on fallback GL platforms.
 - [x] Include real Skia headers for `SkSurface`, `SkCanvas`, `SkImage`, and `SkMesh`.
@@ -40,12 +40,12 @@
 - [ ] Add Skia forward declarations or wrapper headers for `SkShader` and `SkMeshSpecification`.
 - [x] Replace placeholder default renderable with a host-provided or owned `SkSurface` renderable.
 - [ ] Define GPU-first Skia platform integration ownership model for default surfaces.
-- [ ] Add `GrDirectContext` ownership to `skia::Context` for Ganesh rendering.
+- [x] Add `GrDirectContext` ownership to the Skia backend for Ganesh rendering.
 - [ ] Decide whether Graphite should replace or follow Ganesh for the first GPU backend.
-- [ ] Create Metal-backed `GrDirectContext` on Apple platforms.
+- [x] Create Metal-backed `GrDirectContext` on Apple platforms.
 - [ ] Create Vulkan-backed `GrDirectContext` on Linux/Android platforms.
 - [ ] Create GL-backed `GrDirectContext` only as a fallback GPU path.
-- [ ] Replace default raster `SkSurface` with GPU-backed `SkSurface`.
+- [x] Replace default owned `SkSurface` with GPU-backed `SkSurface` when a GPU context is available.
 - [ ] Remove or hard-gate default raster renderable path once GPU surfaces are available.
 - [x] Implement Skia renderable resource binding around current frame surface/canvas.
 - [x] Implement `CommandEncoder::present` flush and submit behavior for Skia surfaces.
@@ -61,6 +61,7 @@
 - [x] Implement offscreen texture snapshot to `Texture2D`.
 - [x] Implement offscreen texture `readStillImage()` via `readPixels`.
 - [ ] Implement offscreen texture as a GPU-backed `SkSurface` where available.
+- [x] Create offscreen textures as GPU-backed `SkSurface`s when a GPU context is available.
 - [ ] Remove or hard-gate raster offscreen texture path once GPU offscreen surfaces are available.
 - [ ] Define Skia uniform byte layout and ownership model.
 - [ ] Implement uniform buffer copying into Skia mesh uniform data.
@@ -68,9 +69,9 @@
 - [x] Define initial Skia vertex attribute packing rules for solid triangle meshes.
 - [ ] Implement MapLibre attribute type to Skia mesh attribute type mapping.
 - [x] Implement initial CPU staging for shared and raw `Short2` position attributes.
-- [ ] Upload SkMesh vertex data to GPU-backed `SkMesh::VertexBuffer` objects.
+- [x] Upload SkMesh vertex data to GPU-backed `SkMesh::VertexBuffer` objects when a GPU context is available.
 - [x] Implement CPU-staged index buffer storage for Skia meshes.
-- [ ] Upload SkMesh index data to GPU-backed `SkMesh::IndexBuffer` objects.
+- [x] Upload SkMesh index data to GPU-backed `SkMesh::IndexBuffer` objects when a GPU context is available.
 - [x] Implement initial `SkMeshSpecification` creation cache for solid color triangle meshes.
 - [x] Implement `SkMesh` creation for indexed triangle drawables.
 - [ ] Implement line draw mode handling or conversion policy.

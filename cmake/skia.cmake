@@ -26,14 +26,30 @@ list(APPEND
         ${PROJECT_SOURCE_DIR}/src/mbgl/skia/context.cpp
         ${PROJECT_SOURCE_DIR}/src/mbgl/skia/drawable.cpp
         ${PROJECT_SOURCE_DIR}/src/mbgl/skia/drawable_builder.cpp
-        ${PROJECT_SOURCE_DIR}/src/mbgl/skia/layer_group.cpp
         ${PROJECT_SOURCE_DIR}/src/mbgl/skia/renderer_backend.cpp
+        ${PROJECT_SOURCE_DIR}/src/mbgl/skia/layer_group.cpp
         ${PROJECT_SOURCE_DIR}/src/mbgl/skia/resources.cpp
         ${PROJECT_SOURCE_DIR}/src/mbgl/shaders/skia/shader_program.cpp
 )
+
+if(APPLE)
+    list(APPEND SRC_FILES ${PROJECT_SOURCE_DIR}/src/mbgl/skia/gpu_context_metal.mm)
+else()
+    list(APPEND SRC_FILES ${PROJECT_SOURCE_DIR}/src/mbgl/skia/gpu_context.cpp)
+endif()
 
 target_link_libraries(
         mbgl-core
         PUBLIC
         mbgl-vendor-skia
 )
+
+if(APPLE)
+    target_link_libraries(
+            mbgl-core
+            PUBLIC
+            "-framework Metal"
+            "-framework QuartzCore"
+            "-framework Foundation"
+    )
+endif()
