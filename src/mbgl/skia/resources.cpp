@@ -130,8 +130,12 @@ void Texture2D::upload(const void* pixelData, const Size& size_) {
 }
 
 void Texture2D::uploadSubRegion(const void* pixelData, const Size& subSize, uint16_t xOffset, uint16_t yOffset) {
-    if (!pixelData || pixels.empty()) {
+    if (!pixelData) {
         return;
+    }
+
+    if (pixels.empty()) {
+        pixels.assign(getDataSize(), 0);
     }
 
     const auto stride = getPixelStride();
@@ -166,6 +170,12 @@ void Texture2D::setImageSnapshot(sk_sp<SkImage> image_) {
         size = {static_cast<uint32_t>(skImage->width()), static_cast<uint32_t>(skImage->height())};
     }
     dirty = false;
+}
+
+void DynamicTexture::uploadImage(const uint8_t* pixelData, gfx::TextureHandle& texHandle) {
+    const auto& rect = texHandle.getRectangle();
+    static_cast<Texture2D&>(*texture).uploadSubRegion(pixelData, {rect.w, rect.h}, rect.x, rect.y);
+    gfx::DynamicTexture::uploadImage(pixelData, texHandle);
 }
 
 UniformBuffer::UniformBuffer(const void* data, std::size_t size_)

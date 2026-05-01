@@ -89,6 +89,8 @@ public:
     bool needsUpload() const noexcept override;
     void setImageSnapshot(sk_sp<SkImage> image_);
     const sk_sp<SkImage>& getImage() const { return skImage; }
+    const SamplerState& getSamplerState() const { return samplerState; }
+    const std::vector<std::uint8_t>& getPixels() const { return pixels; }
 
 private:
     SamplerState samplerState;
@@ -99,6 +101,14 @@ private:
     std::vector<std::uint8_t> pixels;
     sk_sp<SkImage> skImage;
     bool dirty = false;
+};
+
+class DynamicTexture final : public gfx::DynamicTexture {
+public:
+    DynamicTexture(gfx::Context& context, Size size, gfx::TexturePixelType pixelType)
+        : gfx::DynamicTexture(context, size, pixelType) {}
+
+    void uploadImage(const uint8_t* pixelData, gfx::TextureHandle& texHandle) override;
 };
 
 class UniformBuffer final : public gfx::UniformBuffer {

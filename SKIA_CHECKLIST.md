@@ -54,9 +54,9 @@
 - [ ] Implement upload pass texture upload path into GPU texture-backed image objects.
 - [x] Implement `Texture2D` image storage with `SkImage` snapshots.
 - [ ] Replace CPU image snapshots with GPU-backed `SkImage`/texture objects where renderable.
-- [ ] Implement `Texture2D` sampler mapping to Skia sampling and tile modes.
-- [ ] Implement `Texture2D` subregion upload strategy.
-- [ ] Implement `DynamicTexture` behavior backed by Skia textures/images.
+- [x] Implement `Texture2D` sampler mapping to Skia sampling and tile modes.
+- [x] Implement `Texture2D` subregion upload strategy.
+- [x] Implement `DynamicTexture` behavior backed by Skia textures/images.
 - [x] Implement offscreen texture as a temporary raster `SkSurface` prototype.
 - [x] Implement offscreen texture snapshot to `Texture2D`.
 - [x] Implement offscreen texture `readStillImage()` via `readPixels`.
@@ -74,14 +74,14 @@
 - [x] Upload SkMesh index data to GPU-backed `SkMesh::IndexBuffer` objects when a GPU context is available.
 - [x] Implement initial `SkMeshSpecification` creation cache for solid color triangle meshes.
 - [x] Implement `SkMesh` creation for indexed triangle drawables.
-- [ ] Implement line draw mode handling or conversion policy.
+- [x] Implement line draw mode handling or conversion policy.
 - [x] Implement drawable draw path through `SkCanvas::drawMesh`.
 - [x] Verify `SkCanvas::drawMesh` output on GPU-backed Skia surfaces.
 - [x] Add GPU SkMesh smoke executable that writes a visible image artifact.
 - [x] Verify GPU SkMesh smoke executable produces an image artifact on macOS Metal.
 - [x] Add MapLibre `Renderer` Skia smoke executable.
 - [x] Verify MapLibre `Renderer` Skia smoke executable produces a non-black image artifact on macOS Metal.
-- [ ] Implement drawable texture child shader binding.
+- [x] Implement drawable texture child shader binding.
 - [x] Implement initial drawable uniform binding for matrix, viewport, and solid color.
 - [ ] Implement blend state mapping from `gfx::ColorMode` to Skia paint/blend configuration.
 - [ ] Implement cull-face support or document no-op behavior for 2D layers.
@@ -94,14 +94,16 @@
 - [x] Add Skia shader registration in `RendererBackend::initShaders`.
 - [ ] Port clipping mask shader behavior or remove stencil dependency from Skia path.
 - [x] Port background solid shader/render path.
-- [ ] Port background pattern shader/render path.
+- [x] Port background pattern shader/render path.
 - [x] Port fill solid shader/render path.
-- [ ] Port fill outline shader/render path.
-- [ ] Port fill pattern shader/render path.
-- [ ] Port raster shader/render path.
+- [x] Port fill outline shader/render path.
+- [x] Port fill outline pattern shader/render path.
+- [x] Port fill pattern shader/render path.
+- [x] Port raster shader/render path.
 - [x] Pass basic background render tests.
 - [x] Pass basic fill render tests.
-- [ ] Pass basic raster render tests.
+- [x] Pass basic fill outline color render tests.
+- [x] Pass basic raster render tests.
 - [x] Port line solid shader/render path.
 - [x] Port line solid color attribute path.
 - [x] Port line opacity attribute path.
@@ -110,8 +112,8 @@
 - [x] Port line blur attribute path.
 - [x] Port line offset attribute path.
 - [x] Port line gradient shader/render path.
-- [ ] Port line pattern shader/render path.
-- [ ] Port line SDF shader/render path.
+- [x] Port line pattern shader/render path.
+- [x] Port line SDF shader/render path.
 - [x] Pass basic line color render tests.
 - [x] Pass basic line opacity render tests.
 - [x] Pass basic line width render tests.
@@ -119,8 +121,11 @@
 - [ ] Pass basic line blur render tests.
 - [ ] Pass basic line offset render tests.
 - [ ] Pass line gradient render tests.
+- [x] Pass basic line pattern render tests.
+- [x] Pass basic line dasharray render tests.
 - [ ] Pass line render tests.
-- [ ] Port circle shader/render path.
+- [x] Port circle shader/render path.
+- [x] Pass basic circle color/radius/opacity/blur/stroke render tests.
 - [ ] Pass circle render tests.
 - [ ] Port symbol icon shader/render path.
 - [ ] Port symbol SDF text shader/render path.
@@ -133,12 +138,17 @@
 - [ ] Port heatmap colorization pass.
 - [ ] Pass heatmap render tests.
 - [ ] Port hillshade prepare pass.
-- [ ] Port hillshade render pass.
+- [x] Port hillshade render pass (Skia direct DEM path; offscreen prepare still deferred).
 - [ ] Pass hillshade render tests.
-- [ ] Port color relief shader/render path.
-- [ ] Pass color relief render tests.
-- [ ] Decide fill extrusion policy for Skia initial release.
-- [ ] Implement fill extrusion degradation to flat footprint if selected.
+- [x] Port color relief shader/render path.
+- [x] Pass standalone color relief render tests.
+- [x] Decide fill extrusion policy for Skia initial release.
+- [x] Port fill extrusion solid shader/render path.
+- [x] Pass basic fill extrusion color render tests.
+- [x] Pass fill extrusion height render tests.
+- [ ] Pass fill extrusion base render tests.
+- [x] Implement fill extrusion pattern shader/render path.
+- [x] Pass active fill extrusion pattern render tests.
 - [ ] Document unsupported fill extrusion behavior if deferred.
 - [x] Add headless Skia backend for render tests.
 - [ ] Add GLFW or platform sample integration for Skia backend.

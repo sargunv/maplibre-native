@@ -66,7 +66,7 @@ gfx::Texture2DPtr Context::createTexture2D() {
 }
 
 gfx::DynamicTexturePtr Context::createDynamicTexture(Size size, gfx::TexturePixelType pixelType) {
-    return std::make_shared<gfx::DynamicTexture>(*this, size, pixelType);
+    return std::make_shared<DynamicTexture>(*this, size, pixelType);
 }
 
 RenderTargetPtr Context::createRenderTarget(const Size size, const gfx::TextureChannelDataType type) {
