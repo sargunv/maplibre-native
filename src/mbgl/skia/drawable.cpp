@@ -1663,6 +1663,7 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
     std::array<float, 4> hillshadeUnpack = {1.0f, 0.0f, 0.0f, 0.0f};
     std::array<float, 2> hillshadeDimension = {1.0f, 1.0f};
     float hillshadeZoom = 0.0f;
+    bool hillshadeOverzoom = false;
     std::array<float, 2> hillshadeLatrange = {0.0f, 0.0f};
     float hillshadeExaggeration = 0.5f;
     int32_t hillshadeMethod = 0;
@@ -1774,8 +1775,11 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
             if (const auto* data = static_cast<const gfx::HillshadePrepareDrawableData*>(getData().get())) {
                 hillshadeUnpack = hillshadeUnpackVector(data->encoding);
                 hillshadeDimension = {static_cast<float>(data->stride), static_cast<float>(data->stride)};
+                hillshadeZoom = static_cast<float>(std::min<int32_t>(getTileID() ? getTileID()->canonical.z : data->maxzoom,
+                                                                     data->maxzoom));
+                hillshadeOverzoom = parameters.state.getZoom() > static_cast<double>(data->maxzoom);
             }
-            if (getTileID()) {
+            if (getTileID() && !getData()) {
                 hillshadeZoom = static_cast<float>(getTileID()->canonical.z);
             }
             if (const auto* props = getUBO<shaders::HillshadeEvaluatedPropsUBO>(layerUniforms, shaders::idHillshadeEvaluatedPropsUBO)) {
@@ -2943,8 +2947,9 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
         }
         const float dimensions[2] = {static_cast<float>(image->width()), static_cast<float>(image->height())};
         writeUniform(uniforms, *specification, "u_dimension", dimensions, sizeof(dimensions));
-        const auto filterMode = texture.getSamplerState().filter == gfx::TextureFilterType::Nearest ? SkFilterMode::kNearest
-                                                                                                     : SkFilterMode::kLinear;
+        const auto filterMode = hillshadeDrawable && hillshadeOverzoom ? SkFilterMode::kLinear
+                                : (texture.getSamplerState().filter == gfx::TextureFilterType::Nearest ? SkFilterMode::kNearest
+                                                                                                        : SkFilterMode::kLinear);
         auto imageShader = image->makeRawShader(SkTileMode::kClamp,
                                                 SkTileMode::kClamp,
                                                 SkSamplingOptions(filterMode));

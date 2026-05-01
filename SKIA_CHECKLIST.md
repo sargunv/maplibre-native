@@ -139,7 +139,8 @@
 - [ ] Pass heatmap render tests.
 - [ ] Port hillshade prepare pass.
 - [x] Port hillshade render pass (Skia direct DEM path; offscreen prepare still deferred).
-- [ ] Pass hillshade render tests.
+- [x] Pass standalone hillshade render tests.
+- [ ] Pass hillshade layer-combination render tests.
 - [x] Port color relief shader/render path.
 - [x] Pass standalone color relief render tests.
 - [x] Decide fill extrusion policy for Skia initial release.
