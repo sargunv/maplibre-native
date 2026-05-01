@@ -88,7 +88,8 @@ public:
     void upload() override;
     bool needsUpload() const noexcept override;
     void setImageSnapshot(sk_sp<SkImage> image_);
-    const sk_sp<SkImage>& getImage() const { return skImage; }
+    void setSnapshotSource(SkSurface* surface_) { snapshotSource = surface_; }
+    const sk_sp<SkImage>& getImage() const;
     const SamplerState& getSamplerState() const { return samplerState; }
     const std::vector<std::uint8_t>& getPixels() const { return pixels; }
 
@@ -99,7 +100,8 @@ private:
     Size size{0, 0};
     std::shared_ptr<PremultipliedImage> stagedImage;
     std::vector<std::uint8_t> pixels;
-    sk_sp<SkImage> skImage;
+    mutable sk_sp<SkImage> skImage;
+    SkSurface* snapshotSource = nullptr;
     bool dirty = false;
 };
 

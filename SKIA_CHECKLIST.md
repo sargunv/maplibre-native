@@ -127,15 +127,15 @@
 - [x] Port circle shader/render path.
 - [x] Pass basic circle color/radius/opacity/blur/stroke render tests.
 - [ ] Pass circle render tests.
-- [ ] Port symbol icon shader/render path.
+- [x] Port symbol icon shader/render path.
 - [ ] Port symbol SDF text shader/render path.
 - [ ] Port symbol text-and-icon shader/render path.
 - [ ] Pass symbol icon render tests.
 - [ ] Pass symbol text render tests.
 - [ ] Implement collision debug drawing.
 - [ ] Pass collision debug render tests.
-- [ ] Port heatmap accumulation pass.
-- [ ] Port heatmap colorization pass.
+- [x] Port heatmap accumulation pass.
+- [x] Port heatmap colorization pass.
 - [ ] Pass heatmap render tests.
 - [ ] Port hillshade prepare pass.
 - [x] Port hillshade render pass (Skia direct DEM path; offscreen prepare still deferred).

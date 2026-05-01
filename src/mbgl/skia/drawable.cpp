@@ -8,11 +8,14 @@
 #include <mbgl/shaders/color_relief_layer_ubo.hpp>
 #include <mbgl/shaders/fill_extrusion_layer_ubo.hpp>
 #include <mbgl/shaders/fill_layer_ubo.hpp>
+#include <mbgl/shaders/heatmap_layer_ubo.hpp>
+#include <mbgl/shaders/heatmap_texture_layer_ubo.hpp>
 #include <mbgl/shaders/hillshade_layer_ubo.hpp>
 #include <mbgl/shaders/hillshade_prepare_layer_ubo.hpp>
 #include <mbgl/shaders/line_layer_ubo.hpp>
 #include <mbgl/shaders/raster_layer_ubo.hpp>
 #include <mbgl/shaders/shader_defines.hpp>
+#include <mbgl/shaders/symbol_layer_ubo.hpp>
 
 #include <include/core/SkBlender.h>
 #include <include/core/SkColor.h>
@@ -89,6 +92,48 @@ struct UByte4Reader {
     }
 };
 
+struct FloatReader {
+    const gfx::VertexAttribute* attribute = nullptr;
+    const std::uint8_t* data = nullptr;
+    std::size_t count = 0;
+    std::size_t stride = 0;
+
+    bool read(std::uint16_t index, float& value) const {
+        if (data && index < count && stride >= sizeof(float)) {
+            std::memcpy(&value, data + std::size_t(index) * stride, sizeof(float));
+            return true;
+        }
+        if (attribute && !attribute->getSharedRawData() && index < attribute->getCount()) {
+            if (const auto* item = std::get_if<float>(&attribute->get(index))) {
+                value = *item;
+                return true;
+            }
+        }
+        return false;
+    }
+};
+
+struct Float3Reader {
+    const gfx::VertexAttribute* attribute = nullptr;
+    const std::uint8_t* data = nullptr;
+    std::size_t count = 0;
+    std::size_t stride = 0;
+
+    bool read(std::uint16_t index, std::array<float, 3>& value) const {
+        if (data && index < count && stride >= sizeof(float) * 3) {
+            std::memcpy(value.data(), data + std::size_t(index) * stride, sizeof(float) * 3);
+            return true;
+        }
+        if (attribute && !attribute->getSharedRawData() && index < attribute->getCount()) {
+            if (const auto* item = std::get_if<gfx::VertexAttribute::float3>(&attribute->get(index))) {
+                value = *item;
+                return true;
+            }
+        }
+        return false;
+    }
+};
+
 struct UShort4Reader {
     const std::uint8_t* data = nullptr;
     std::size_t count = 0;
@@ -124,6 +169,14 @@ struct MeshVertex {
     float circleStrokeColor[4];
     float circleData[4];
     float rasterTexturePos[2];
+    float heatmapWeight[2];
+    float heatmapRadius[2];
+    float symbolPosOffset[4];
+    float symbolData[4];
+    float symbolPixelOffset[4];
+    float symbolProjectedPos[3];
+    float symbolFadeOpacity;
+    float symbolOpacity[2];
     float fillPatternPosA[2];
     float fillPatternPosB[2];
     float fillPatternFrom[4];
@@ -1377,6 +1430,277 @@ sk_sp<SkMeshSpecification> hillshadeMeshSpecification() {
     return specification;
 }
 
+sk_sp<SkMeshSpecification> heatmapMeshSpecification() {
+    static sk_sp<SkMeshSpecification> specification;
+    if (specification) {
+        return specification;
+    }
+
+    using Attribute = SkMeshSpecification::Attribute;
+    using Varying = SkMeshSpecification::Varying;
+    const Attribute attributes[] = {{Attribute::Type::kFloat2, offsetof(MeshVertex, position), SkString("a_pos")},
+                                    {Attribute::Type::kFloat2, offsetof(MeshVertex, heatmapWeight), SkString("a_weight")},
+                                    {Attribute::Type::kFloat2, offsetof(MeshVertex, heatmapRadius), SkString("a_radius")}};
+    const Varying varyings[] = {{Varying::Type::kFloat, SkString("weight")},
+                                {Varying::Type::kFloat2, SkString("extrude")}};
+
+    const SkString vertexShader(R"(
+        const float ZERO = 1.0 / 255.0 / 16.0;
+        const float GAUSS_COEF = 0.3989422804014327;
+
+        uniform float4x4 u_matrix;
+        uniform float2 u_viewport;
+        uniform float u_extrude_scale;
+        uniform float u_weight;
+        uniform float u_radius;
+        uniform float u_intensity;
+        uniform float u_weight_t;
+        uniform float u_radius_t;
+
+        float unpack_mix_float(float2 value, float t) {
+            return mix(value.x, value.y, t);
+        }
+
+        Varyings main(const Attributes attrs) {
+            Varyings varyings;
+            float weight = unpack_mix_float(attrs.a_weight, u_weight_t);
+            float radius = unpack_mix_float(attrs.a_radius, u_radius_t);
+            float2 unscaled_extrude = mod(attrs.a_pos, 2.0) * 2.0 - 1.0;
+            float S = sqrt(-2.0 * log(ZERO / (max(weight, ZERO) * max(u_intensity, ZERO) * GAUSS_COEF))) / 3.0;
+            varyings.extrude = S * unscaled_extrude;
+            varyings.weight = weight;
+            float2 scaled_extrude = varyings.extrude * radius * u_extrude_scale;
+            float2 tile_pos = floor(attrs.a_pos * 0.5) + scaled_extrude;
+
+            float4 projected = u_matrix * float4(tile_pos, 0.0, 1.0);
+            float inv_w = projected.w == 0.0 ? 1.0 : 1.0 / projected.w;
+            float2 ndc = projected.xy * inv_w;
+            varyings.position = float2((ndc.x * 0.5 + 0.5) * u_viewport.x,
+                                       (0.5 - ndc.y * 0.5) * u_viewport.y);
+            return varyings;
+        }
+    )");
+
+    const SkString fragmentShader(R"(
+        const float GAUSS_COEF = 0.3989422804014327;
+        uniform float u_intensity;
+
+        float2 main(const Varyings varyings, out half4 color) {
+            float d = -0.5 * 3.0 * 3.0 * dot(varyings.extrude, varyings.extrude);
+            float val = varyings.weight * u_intensity * GAUSS_COEF * exp(d);
+            color = half4(val, 1.0, 1.0, 1.0);
+            return varyings.position;
+        }
+    )");
+
+    auto [spec, error] = SkMeshSpecification::Make(attributes,
+                                                    sizeof(MeshVertex),
+                                                    varyings,
+                                                    vertexShader,
+                                                    fragmentShader,
+                                                    SkColorSpace::MakeSRGB(),
+                                                    kPremul_SkAlphaType);
+    (void)error;
+    specification = std::move(spec);
+    return specification;
+}
+
+sk_sp<SkMeshSpecification> heatmapTextureMeshSpecification() {
+    static sk_sp<SkMeshSpecification> specification;
+    if (specification) {
+        return specification;
+    }
+
+    using Attribute = SkMeshSpecification::Attribute;
+    using Varying = SkMeshSpecification::Varying;
+    const Attribute attributes[] = {{Attribute::Type::kFloat2, offsetof(MeshVertex, position), SkString("a_pos")}};
+    const Varying varyings[] = {{Varying::Type::kFloat2, SkString("pos")}};
+
+    const SkString vertexShader(R"(
+        uniform float4x4 u_matrix;
+        uniform float2 u_viewport;
+        uniform float2 u_world_size;
+
+        Varyings main(const Attributes attrs) {
+            Varyings varyings;
+            float2 pos = attrs.a_pos;
+            float4 projected = u_matrix * float4(pos * u_world_size, 0.0, 1.0);
+            float inv_w = projected.w == 0.0 ? 1.0 : 1.0 / projected.w;
+            float2 ndc = projected.xy * inv_w;
+            varyings.position = float2((ndc.x * 0.5 + 0.5) * u_viewport.x,
+                                       (0.5 - ndc.y * 0.5) * u_viewport.y);
+            varyings.pos = pos;
+            return varyings;
+        }
+    )");
+
+    const SkString fragmentShader(R"(
+        uniform shader u_image;
+        uniform shader u_color_ramp;
+        uniform float2 u_image_size;
+        uniform float u_opacity;
+
+        float2 main(const Varyings varyings, out half4 color) {
+            float t = u_image.eval(varyings.pos * u_image_size).r;
+            color = half4(u_color_ramp.eval(float2(t * 256.0, 0.5)) * u_opacity);
+            return varyings.position;
+        }
+    )");
+
+    auto [spec, error] = SkMeshSpecification::Make(attributes,
+                                                    sizeof(MeshVertex),
+                                                    varyings,
+                                                    vertexShader,
+                                                    fragmentShader,
+                                                    SkColorSpace::MakeSRGB(),
+                                                    kPremul_SkAlphaType);
+    (void)error;
+    specification = std::move(spec);
+    return specification;
+}
+
+sk_sp<SkMeshSpecification> symbolIconMeshSpecification() {
+    static sk_sp<SkMeshSpecification> specification;
+    if (specification) {
+        return specification;
+    }
+
+    using Attribute = SkMeshSpecification::Attribute;
+    using Varying = SkMeshSpecification::Varying;
+    const Attribute attributes[] = {{Attribute::Type::kFloat4, offsetof(MeshVertex, symbolPosOffset), SkString("a_pos_offset")},
+                                    {Attribute::Type::kFloat4, offsetof(MeshVertex, symbolData), SkString("a_data")},
+                                    {Attribute::Type::kFloat4, offsetof(MeshVertex, symbolPixelOffset), SkString("a_pixel_offset")},
+                                    {Attribute::Type::kFloat3, offsetof(MeshVertex, symbolProjectedPos), SkString("a_projected_pos")},
+                                    {Attribute::Type::kFloat, offsetof(MeshVertex, symbolFadeOpacity), SkString("a_fade_opacity")},
+                                    {Attribute::Type::kFloat2, offsetof(MeshVertex, symbolOpacity), SkString("a_opacity")}};
+    const Varying varyings[] = {{Varying::Type::kFloat2, SkString("tex")},
+                                {Varying::Type::kFloat, SkString("opacity")}};
+
+    const SkString vertexShader(R"(
+        const float c_offscreen_degenerate_triangle_location = -2.0;
+
+        uniform float4x4 u_matrix;
+        uniform float4x4 u_label_plane_matrix;
+        uniform float4x4 u_coord_matrix;
+        uniform float2 u_viewport;
+        uniform float u_camera_to_center_distance;
+        uniform float u_symbol_fade_change;
+        uniform float u_aspect_ratio;
+        uniform float u_rotate_symbol;
+        uniform float u_pitch_with_map;
+        uniform float u_is_size_zoom_constant;
+        uniform float u_is_size_feature_constant;
+        uniform float u_is_offset;
+        uniform float u_size_t;
+        uniform float u_size;
+        uniform float u_opacity_t;
+
+        float2 unpack_opacity(float packed_opacity) {
+            float value = floor(packed_opacity);
+            return float2(floor(value / 2.0) / 127.0, mod(value, 2.0));
+        }
+
+        float unpack_mix_float(float2 value, float t) {
+            return mix(value.x, value.y, t);
+        }
+
+        float2 project_to_screen(float4 position) {
+            float inv_w = position.w == 0.0 ? 1.0 : 1.0 / position.w;
+            float2 ndc = position.xy * inv_w;
+            return float2((ndc.x * 0.5 + 0.5) * u_viewport.x,
+                          (0.5 - ndc.y * 0.5) * u_viewport.y);
+        }
+
+        Varyings main(const Attributes attrs) {
+            Varyings varyings;
+
+            float2 raw_fade_opacity = unpack_opacity(attrs.a_fade_opacity);
+            float fade_change = raw_fade_opacity.y > 0.5 ? u_symbol_fade_change : -u_symbol_fade_change;
+            float fade_opacity = clamp(raw_fade_opacity.x + fade_change, 0.0, 1.0);
+            float opacity = unpack_mix_float(attrs.a_opacity, u_opacity_t) * fade_opacity;
+            if (opacity == 0.0) {
+                varyings.position = float2(c_offscreen_degenerate_triangle_location,
+                                           c_offscreen_degenerate_triangle_location);
+                varyings.tex = attrs.a_data.xy;
+                varyings.opacity = opacity;
+                return varyings;
+            }
+
+            float2 a_pos = attrs.a_pos_offset.xy;
+            float2 a_offset = attrs.a_pos_offset.zw;
+            float2 a_tex = attrs.a_data.xy;
+            float2 a_size = attrs.a_data.zw;
+            float a_size_min = floor(a_size.x * 0.5);
+            float2 a_pxoffset = attrs.a_pixel_offset.xy;
+            float2 a_min_font_scale = attrs.a_pixel_offset.zw / 256.0;
+            float segment_angle = -attrs.a_projected_pos.z;
+
+            float size;
+            if (u_is_size_zoom_constant < 0.5 && u_is_size_feature_constant < 0.5) {
+                size = mix(a_size_min, a_size.y, u_size_t) / 128.0;
+            } else if (u_is_size_zoom_constant >= 0.5 && u_is_size_feature_constant < 0.5) {
+                size = a_size_min / 128.0;
+            } else {
+                size = u_size;
+            }
+
+            float4 projected_point = u_matrix * float4(a_pos, 0.0, 1.0);
+            float camera_to_anchor_distance = projected_point.w;
+            float distance_ratio = u_pitch_with_map >= 0.5
+                ? camera_to_anchor_distance / u_camera_to_center_distance
+                : u_camera_to_center_distance / camera_to_anchor_distance;
+            float perspective_ratio = clamp(0.5 + 0.5 * distance_ratio, 0.0, 4.0);
+            if (u_is_offset < 0.5) {
+                size *= perspective_ratio;
+            }
+
+            float symbol_rotation = 0.0;
+            if (u_rotate_symbol >= 0.5) {
+                float4 offset_projected_point = u_matrix * float4(a_pos + float2(1.0, 0.0), 0.0, 1.0);
+                float2 a = projected_point.xy / projected_point.w;
+                float2 b = offset_projected_point.xy / offset_projected_point.w;
+                symbol_rotation = atan((b.y - a.y) / u_aspect_ratio, b.x - a.x);
+            }
+
+            float angle = segment_angle + symbol_rotation;
+            float angle_sin = sin(angle);
+            float angle_cos = cos(angle);
+
+            float4 projected_pos = u_label_plane_matrix * float4(attrs.a_projected_pos.xy, 0.0, 1.0);
+            float2 pos0 = projected_pos.xy / projected_pos.w;
+            float2 pos_offset = a_offset * max(a_min_font_scale, float2(size)) / 32.0 + a_pxoffset / 16.0;
+            float2 rotated_offset = float2(angle_cos * pos_offset.x - angle_sin * pos_offset.y,
+                                           angle_sin * pos_offset.x + angle_cos * pos_offset.y);
+            float4 position = u_coord_matrix * float4(pos0 + rotated_offset, 0.0, 1.0);
+
+            varyings.position = project_to_screen(position);
+            varyings.tex = a_tex;
+            varyings.opacity = opacity;
+            return varyings;
+        }
+    )");
+
+    const SkString fragmentShader(R"(
+        uniform shader u_image;
+
+        float2 main(const Varyings varyings, out half4 color) {
+            color = half4(u_image.eval(varyings.tex) * varyings.opacity);
+            return varyings.position;
+        }
+    )");
+
+    auto [spec, error] = SkMeshSpecification::Make(attributes,
+                                                    sizeof(MeshVertex),
+                                                    varyings,
+                                                    vertexShader,
+                                                    fragmentShader,
+                                                    SkColorSpace::MakeSRGB(),
+                                                    kPremul_SkAlphaType);
+    (void)error;
+    specification = std::move(spec);
+    return specification;
+}
+
 sk_sp<SkMeshSpecification> fillPatternMeshSpecification() {
     static sk_sp<SkMeshSpecification> specification;
     if (specification) {
@@ -1654,12 +1978,34 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
     float circleStrokeOpacityT = 0.0f;
     bool rasterDrawable = false;
     bool colorReliefDrawable = false;
+    bool heatmapDrawable = false;
+    bool heatmapTextureDrawable = false;
+    bool symbolIconDrawable = false;
     bool hillshadePrepareDrawable = false;
     bool hillshadeDrawable = false;
     std::array<float, 4> colorReliefUnpack = {1.0f, 0.0f, 0.0f, 0.0f};
     std::array<float, 2> colorReliefDimension = {1.0f, 1.0f};
     int32_t colorReliefRampSize = 0;
     float colorReliefOpacity = 1.0f;
+    float heatmapExtrudeScale = 1.0f;
+    float heatmapWeight = 1.0f;
+    float heatmapRadius = 30.0f;
+    float heatmapIntensity = 1.0f;
+    float heatmapWeightT = 0.0f;
+    float heatmapRadiusT = 0.0f;
+    float heatmapTextureOpacity = 1.0f;
+    std::array<float, 16> symbolLabelPlaneMatrix = identityMatrix();
+    std::array<float, 16> symbolCoordMatrix = identityMatrix();
+    std::array<float, 2> symbolTexsize = {1.0f, 1.0f};
+    float symbolRotateSymbol = 0.0f;
+    float symbolPitchWithMap = 0.0f;
+    float symbolIsSizeZoomConstant = 1.0f;
+    float symbolIsSizeFeatureConstant = 1.0f;
+    float symbolIsOffset = 0.0f;
+    float symbolSizeT = 0.0f;
+    float symbolSize = 1.0f;
+    float symbolOpacityT = 0.0f;
+    float symbolOpacity = 1.0f;
     std::array<float, 4> hillshadeUnpack = {1.0f, 0.0f, 0.0f, 0.0f};
     std::array<float, 2> hillshadeDimension = {1.0f, 1.0f};
     float hillshadeZoom = 0.0f;
@@ -1715,9 +2061,12 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
     const auto& colorReliefImageTexture = getTexture(shaders::idColorReliefImageTexture);
     const auto& colorReliefElevationStopsTexture = getTexture(shaders::idColorReliefElevationStopsTexture);
     const auto& colorReliefColorStopsTexture = getTexture(shaders::idColorReliefColorStopsTexture);
+    const auto& heatmapImageTexture = getTexture(shaders::idHeatmapImageTexture);
+    const auto& heatmapColorRampTexture = getTexture(shaders::idHeatmapColorRampTexture);
     const auto& hillshadeImageTexture = getTexture(shaders::idHillshadeImageTexture);
     const auto& rasterImage0Texture = getTexture(shaders::idRasterImage0Texture);
     const auto& rasterImage1Texture = getTexture(shaders::idRasterImage1Texture);
+    const auto& symbolImageTexture = getTexture(shaders::idSymbolImageTexture);
     const bool lineGradientDrawable = getName().find("lineGradient") != std::string::npos;
     const bool linePatternDrawable = getName().find("linePattern") != std::string::npos;
     const bool lineSDFDrawable = getName().find("lineSDF") != std::string::npos;
@@ -1740,7 +2089,59 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
         }
     }
 
-    if (getName().find("hillshadePrepare") != std::string::npos && hillshadeImageTexture) {
+    if (getName().find("/icon") != std::string::npos && symbolImageTexture) {
+        const shaders::SymbolDrawableUBO* drawableUBO = nullptr;
+#if MLN_UBO_CONSOLIDATION
+        drawableUBO = getUBO<shaders::SymbolDrawableUBO>(layerUniforms, shaders::idSymbolDrawableUBO, getUBOIndex());
+#endif
+        if (!drawableUBO) {
+            drawableUBO = getUBO<shaders::SymbolDrawableUBO>(&getUniformBuffers(), shaders::idSymbolDrawableUBO);
+        }
+        if (drawableUBO) {
+            symbolIconDrawable = true;
+            matrix = drawableUBO->matrix;
+            symbolLabelPlaneMatrix = drawableUBO->label_plane_matrix;
+            symbolCoordMatrix = drawableUBO->coord_matrix;
+            symbolTexsize = drawableUBO->texsize;
+            symbolRotateSymbol = drawableUBO->rotate_symbol ? 1.0f : 0.0f;
+            symbolPitchWithMap = drawableUBO->pitch_with_map ? 1.0f : 0.0f;
+            symbolIsSizeZoomConstant = drawableUBO->is_size_zoom_constant ? 1.0f : 0.0f;
+            symbolIsSizeFeatureConstant = drawableUBO->is_size_feature_constant ? 1.0f : 0.0f;
+            symbolIsOffset = drawableUBO->is_offset ? 1.0f : 0.0f;
+            symbolSizeT = drawableUBO->size_t;
+            symbolSize = drawableUBO->size;
+            symbolOpacityT = drawableUBO->opacity_t;
+            if (const auto* props = getUBO<shaders::SymbolEvaluatedPropsUBO>(layerUniforms, shaders::idSymbolEvaluatedPropsUBO)) {
+                symbolOpacity = props->icon_opacity;
+            }
+        }
+    } else if (getName().find("heatmapTexture") != std::string::npos && heatmapImageTexture && heatmapColorRampTexture) {
+        if (const auto* props = getUBO<shaders::HeatmapTexturePropsUBO>(layerUniforms, shaders::idHeatmapTexturePropsUBO)) {
+            heatmapTextureDrawable = true;
+            matrix = props->matrix;
+            heatmapTextureOpacity = props->opacity;
+        }
+    } else if (getName().find("heatmap") != std::string::npos && getName().find("Texture") == std::string::npos) {
+        const shaders::HeatmapDrawableUBO* drawableUBO = nullptr;
+#if MLN_UBO_CONSOLIDATION
+        drawableUBO = getUBO<shaders::HeatmapDrawableUBO>(layerUniforms, shaders::idHeatmapDrawableUBO, getUBOIndex());
+#endif
+        if (!drawableUBO) {
+            drawableUBO = getUBO<shaders::HeatmapDrawableUBO>(&getUniformBuffers(), shaders::idHeatmapDrawableUBO);
+        }
+        if (drawableUBO) {
+            heatmapDrawable = true;
+            matrix = drawableUBO->matrix;
+            heatmapExtrudeScale = drawableUBO->extrude_scale;
+            heatmapWeightT = drawableUBO->weight_t;
+            heatmapRadiusT = drawableUBO->radius_t;
+            if (const auto* props = getUBO<shaders::HeatmapEvaluatedPropsUBO>(layerUniforms, shaders::idHeatmapEvaluatedPropsUBO)) {
+                heatmapWeight = props->weight;
+                heatmapRadius = props->radius;
+                heatmapIntensity = props->intensity;
+            }
+        }
+    } else if (getName().find("hillshadePrepare") != std::string::npos && hillshadeImageTexture) {
         const shaders::HillshadePrepareDrawableUBO* drawableUBO = nullptr;
         const shaders::HillshadePrepareTilePropsUBO* tilePropsUBO = nullptr;
         drawableUBO = getUBO<shaders::HillshadePrepareDrawableUBO>(&getUniformBuffers(), shaders::idHillshadePrepareDrawableUBO);
@@ -2201,21 +2602,27 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
     if (!vertices.empty() && vertexDataType == gfx::AttributeDataType::Short2) {
         vertexReader = VertexReader{vertices.data(), vertexCount, sizeof(std::int16_t) * 2};
     } else if (const auto& attrs = getVertexAttributes()) {
-        const std::size_t fallbackPositionAttributeId = (hillshadePrepareDrawable || hillshadeDrawable) ? static_cast<std::size_t>(shaders::idHillshadePosVertexAttribute)
-                                                       : (colorReliefDrawable ? static_cast<std::size_t>(shaders::idColorReliefPosVertexAttribute)
-                                                        : (fillExtrusionDrawable ? static_cast<std::size_t>(shaders::idFillExtrusionPosVertexAttribute)
-                                                        : (rasterDrawable ? static_cast<std::size_t>(shaders::idRasterPosVertexAttribute) : (circleDrawable ? static_cast<std::size_t>(shaders::idCirclePosVertexAttribute) : (lineDrawable
-                                                                                                                                                           ? static_cast<std::size_t>(shaders::idLinePosNormalVertexAttribute)
-                                                                                                                                                           : static_cast<std::size_t>(shaders::idFillPosVertexAttribute))))));
+        const std::size_t fallbackPositionAttributeId = (heatmapDrawable || heatmapTextureDrawable) ? static_cast<std::size_t>(shaders::idHeatmapPosVertexAttribute)
+                                                        : ((hillshadePrepareDrawable || hillshadeDrawable) ? static_cast<std::size_t>(shaders::idHillshadePosVertexAttribute)
+                                                        : (colorReliefDrawable ? static_cast<std::size_t>(shaders::idColorReliefPosVertexAttribute)
+                                                          : (fillExtrusionDrawable ? static_cast<std::size_t>(shaders::idFillExtrusionPosVertexAttribute)
+                                                          : (symbolIconDrawable ? static_cast<std::size_t>(shaders::idSymbolPosOffsetVertexAttribute)
+                                                          : (rasterDrawable ? static_cast<std::size_t>(shaders::idRasterPosVertexAttribute) : (circleDrawable ? static_cast<std::size_t>(shaders::idCirclePosVertexAttribute) : (lineDrawable
+                                                                                                                                                             ? static_cast<std::size_t>(shaders::idLinePosNormalVertexAttribute)
+                                                                                                                                                             : static_cast<std::size_t>(shaders::idFillPosVertexAttribute))))))));
         const auto& attr = attrs->get(positionAttributeId) ? attrs->get(positionAttributeId)
-                                                          : attrs->get(fallbackPositionAttributeId);
-        if (attr && attr->getSharedRawData() && attr->getSharedType() == gfx::AttributeDataType::Short2) {
+                                                           : attrs->get(fallbackPositionAttributeId);
+        if (attr && attr->getSharedRawData() && (attr->getSharedType() == gfx::AttributeDataType::Short2 ||
+                                                attr->getSharedType() == gfx::AttributeDataType::Short4)) {
             const auto* raw = static_cast<const std::uint8_t*>(attr->getSharedRawData()->getRawData());
             vertexReader = VertexReader{raw + attr->getSharedOffset() + attr->getSharedVertexOffset() * attr->getSharedStride(),
                                         vertexCount ? vertexCount : attr->getSharedRawData()->getRawCount(),
                                         attr->getSharedStride()};
-        } else if (attr && attr->getDataType() == gfx::AttributeDataType::Short2 && !attr->getRawData().empty()) {
-            vertexReader = VertexReader{attr->getRawData().data(), vertexCount, sizeof(std::int16_t) * 2};
+        } else if (attr && (attr->getDataType() == gfx::AttributeDataType::Short2 ||
+                            attr->getDataType() == gfx::AttributeDataType::Short4) && !attr->getRawData().empty()) {
+            const auto stride = attr->getDataType() == gfx::AttributeDataType::Short4 ? sizeof(std::int16_t) * 4
+                                                                                      : sizeof(std::int16_t) * 2;
+            vertexReader = VertexReader{attr->getRawData().data(), vertexCount, stride};
         }
     }
     if (!vertexReader.data) {
@@ -2223,6 +2630,9 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
     }
 
     const auto specification = [&] {
+        if (symbolIconDrawable) return symbolIconMeshSpecification();
+        if (heatmapTextureDrawable) return heatmapTextureMeshSpecification();
+        if (heatmapDrawable) return heatmapMeshSpecification();
         if (hillshadePrepareDrawable) return hillshadePrepareMeshSpecification();
         if (hillshadeDrawable) return hillshadeMeshSpecification();
         if (colorReliefDrawable) return colorReliefMeshSpecification();
@@ -2262,10 +2672,121 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
     Float4Reader circleStrokeColorReader;
     Float2Reader circleStrokeWidthReader;
     Float2Reader circleStrokeOpacityReader;
+    Float2Reader heatmapWeightReader;
+    Float2Reader heatmapRadiusReader;
+    Short4Reader symbolPosOffsetReader;
+    UShort4Reader symbolDataReader;
+    Short4Reader symbolPixelOffsetReader;
+    Float3Reader symbolProjectedPosReader;
+    FloatReader symbolFadeOpacityReader;
+    Float2Reader symbolOpacityReader;
     VertexReader rasterTexturePosReader;
     UShort4Reader fillPatternFromReader;
     UShort4Reader fillPatternToReader;
-    if (fillExtrusionDrawable) {
+    if (symbolIconDrawable) {
+        if (const auto& attrs = getVertexAttributes()) {
+            const auto initShort4Reader = [](const gfx::VertexAttribute& attr, Short4Reader& reader) {
+                if (attr.getSharedRawData() && attr.getSharedType() == gfx::AttributeDataType::Short4) {
+                    const auto offset = attr.getSharedOffset() + attr.getSharedVertexOffset() * attr.getSharedStride();
+                    reader.data = static_cast<const std::uint8_t*>(attr.getSharedRawData()->getRawData()) + offset;
+                    reader.stride = attr.getSharedStride();
+                    reader.count = attr.getSharedRawData()->getRawCount() - attr.getSharedVertexOffset();
+                } else if (attr.getDataType() == gfx::AttributeDataType::Short4 && !attr.getRawData().empty()) {
+                    reader.data = attr.getRawData().data();
+                    reader.stride = sizeof(std::int16_t) * 4;
+                    reader.count = attr.getRawData().size() / reader.stride;
+                }
+            };
+            const auto initUShort4Reader = [](const gfx::VertexAttribute& attr, UShort4Reader& reader) {
+                if (attr.getSharedRawData() && attr.getSharedType() == gfx::AttributeDataType::UShort4) {
+                    const auto offset = attr.getSharedOffset() + attr.getSharedVertexOffset() * attr.getSharedStride();
+                    reader.data = static_cast<const std::uint8_t*>(attr.getSharedRawData()->getRawData()) + offset;
+                    reader.stride = attr.getSharedStride();
+                    reader.count = attr.getSharedRawData()->getRawCount() - attr.getSharedVertexOffset();
+                } else if (attr.getDataType() == gfx::AttributeDataType::UShort4 && !attr.getRawData().empty()) {
+                    reader.data = attr.getRawData().data();
+                    reader.stride = sizeof(std::uint16_t) * 4;
+                    reader.count = attr.getRawData().size() / reader.stride;
+                }
+            };
+            const auto initFloatReader = [](const gfx::VertexAttribute& attr, FloatReader& reader) {
+                reader.attribute = &attr;
+                if (attr.getSharedRawData() && attr.getSharedType() == gfx::AttributeDataType::Float) {
+                    const auto offset = attr.getSharedOffset() + attr.getSharedVertexOffset() * attr.getSharedStride();
+                    reader.data = static_cast<const std::uint8_t*>(attr.getSharedRawData()->getRawData()) + offset;
+                    reader.stride = attr.getSharedStride();
+                    reader.count = attr.getSharedRawData()->getRawCount() - attr.getSharedVertexOffset();
+                } else if (attr.getDataType() == gfx::AttributeDataType::Float && !attr.getRawData().empty()) {
+                    reader.data = attr.getRawData().data();
+                    reader.stride = sizeof(float);
+                    reader.count = attr.getRawData().size() / reader.stride;
+                }
+            };
+            const auto initFloat2Reader = [](const gfx::VertexAttribute& attr, Float2Reader& reader) {
+                reader.attribute = &attr;
+                if (attr.getSharedRawData() && (attr.getSharedType() == gfx::AttributeDataType::Float2 ||
+                                                attr.getSharedType() == gfx::AttributeDataType::Float)) {
+                    const auto offset = attr.getSharedOffset() + attr.getSharedVertexOffset() * attr.getSharedStride();
+                    reader.data = static_cast<const std::uint8_t*>(attr.getSharedRawData()->getRawData()) + offset;
+                    reader.stride = attr.getSharedStride();
+                    reader.components = attr.getSharedType() == gfx::AttributeDataType::Float ? 1 : 2;
+                    reader.count = attr.getSharedRawData()->getRawCount() - attr.getSharedVertexOffset();
+                } else if ((attr.getDataType() == gfx::AttributeDataType::Float2 || attr.getDataType() == gfx::AttributeDataType::Float) &&
+                           !attr.getRawData().empty()) {
+                    reader.data = attr.getRawData().data();
+                    reader.components = attr.getDataType() == gfx::AttributeDataType::Float ? 1 : 2;
+                    reader.stride = sizeof(float) * reader.components;
+                    reader.count = attr.getRawData().size() / reader.stride;
+                }
+            };
+            const auto initFloat3Reader = [](const gfx::VertexAttribute& attr, Float3Reader& reader) {
+                reader.attribute = &attr;
+                if (attr.getSharedRawData() && attr.getSharedType() == gfx::AttributeDataType::Float3) {
+                    const auto offset = attr.getSharedOffset() + attr.getSharedVertexOffset() * attr.getSharedStride();
+                    reader.data = static_cast<const std::uint8_t*>(attr.getSharedRawData()->getRawData()) + offset;
+                    reader.stride = attr.getSharedStride();
+                    reader.count = attr.getSharedRawData()->getRawCount() - attr.getSharedVertexOffset();
+                } else if (attr.getDataType() == gfx::AttributeDataType::Float3 && !attr.getRawData().empty()) {
+                    reader.data = attr.getRawData().data();
+                    reader.stride = sizeof(float) * 3;
+                    reader.count = attr.getRawData().size() / reader.stride;
+                }
+            };
+
+            if (const auto& attr = attrs->get(shaders::idSymbolPosOffsetVertexAttribute)) initShort4Reader(*attr, symbolPosOffsetReader);
+            if (const auto& attr = attrs->get(shaders::idSymbolDataVertexAttribute)) initUShort4Reader(*attr, symbolDataReader);
+            if (const auto& attr = attrs->get(shaders::idSymbolPixelOffsetVertexAttribute)) initShort4Reader(*attr, symbolPixelOffsetReader);
+            if (const auto& attr = attrs->get(shaders::idSymbolProjectedPosVertexAttribute)) initFloat3Reader(*attr, symbolProjectedPosReader);
+            if (const auto& attr = attrs->get(shaders::idSymbolFadeOpacityVertexAttribute)) initFloatReader(*attr, symbolFadeOpacityReader);
+            if (const auto& attr = attrs->get(shaders::idSymbolOpacityVertexAttribute)) initFloat2Reader(*attr, symbolOpacityReader);
+        }
+        if (!symbolPosOffsetReader.data || !symbolDataReader.data || !symbolPixelOffsetReader.data ||
+            !symbolProjectedPosReader.data || !symbolFadeOpacityReader.data) {
+            return;
+        }
+    } else if (heatmapDrawable) {
+        if (const auto& attrs = getVertexAttributes()) {
+            const auto initFloat2Reader = [](const gfx::VertexAttribute& attr, Float2Reader& reader) {
+                reader.attribute = &attr;
+                if (attr.getSharedRawData() && (attr.getSharedType() == gfx::AttributeDataType::Float2 ||
+                                                attr.getSharedType() == gfx::AttributeDataType::Float)) {
+                    const auto offset = attr.getSharedOffset() + attr.getSharedVertexOffset() * attr.getSharedStride();
+                    reader.data = static_cast<const std::uint8_t*>(attr.getSharedRawData()->getRawData()) + offset;
+                    reader.stride = attr.getSharedStride();
+                    reader.components = attr.getSharedType() == gfx::AttributeDataType::Float ? 1 : 2;
+                    reader.count = attr.getSharedRawData()->getRawCount() - attr.getSharedVertexOffset();
+                } else if ((attr.getDataType() == gfx::AttributeDataType::Float2 || attr.getDataType() == gfx::AttributeDataType::Float) &&
+                           !attr.getRawData().empty()) {
+                    reader.data = attr.getRawData().data();
+                    reader.components = attr.getDataType() == gfx::AttributeDataType::Float ? 1 : 2;
+                    reader.stride = sizeof(float) * reader.components;
+                    reader.count = attr.getRawData().size() / reader.stride;
+                }
+            };
+            if (const auto& attr = attrs->get(shaders::idHeatmapWeightVertexAttribute)) initFloat2Reader(*attr, heatmapWeightReader);
+            if (const auto& attr = attrs->get(shaders::idHeatmapRadiusVertexAttribute)) initFloat2Reader(*attr, heatmapRadiusReader);
+        }
+    } else if (fillExtrusionDrawable) {
         if (const auto& attrs = getVertexAttributes()) {
             if (const auto& attr = attrs->get(shaders::idFillExtrusionNormalEdVertexAttribute)) {
                 if (attr->getSharedRawData() && attr->getSharedType() == gfx::AttributeDataType::Short4) {
@@ -2486,10 +3007,45 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
         if (!vertexReader.read(static_cast<std::uint16_t>(i), meshVertices[i].position[0], meshVertices[i].position[1])) {
             return;
         }
-        if (rasterDrawable || colorReliefDrawable || hillshadePrepareDrawable || hillshadeDrawable) {
+        if (symbolIconDrawable) {
+            std::array<std::int16_t, 4> posOffset;
+            std::array<float, 4> data;
+            std::array<std::int16_t, 4> pixelOffset;
+            std::array<float, 3> projectedPos;
+            float fadeOpacity = 0.0f;
+            if (!symbolPosOffsetReader.read(static_cast<std::uint16_t>(i), posOffset) ||
+                !symbolDataReader.read(static_cast<std::uint16_t>(i), data) ||
+                !symbolPixelOffsetReader.read(static_cast<std::uint16_t>(i), pixelOffset) ||
+                !symbolProjectedPosReader.read(static_cast<std::uint16_t>(i), projectedPos) ||
+                !symbolFadeOpacityReader.read(static_cast<std::uint16_t>(i), fadeOpacity)) {
+                return;
+            }
+            std::array<float, 2> opacity = {symbolOpacity, symbolOpacity};
+            symbolOpacityReader.read(static_cast<std::uint16_t>(i), opacity);
+            for (std::size_t j = 0; j < 4; ++j) {
+                meshVertices[i].symbolPosOffset[j] = static_cast<float>(posOffset[j]);
+                meshVertices[i].symbolData[j] = data[j];
+                meshVertices[i].symbolPixelOffset[j] = static_cast<float>(pixelOffset[j]);
+            }
+            for (std::size_t j = 0; j < 3; ++j) {
+                meshVertices[i].symbolProjectedPos[j] = projectedPos[j];
+            }
+            meshVertices[i].symbolFadeOpacity = fadeOpacity;
+            meshVertices[i].symbolOpacity[0] = opacity[0];
+            meshVertices[i].symbolOpacity[1] = opacity[1];
+        } else if (rasterDrawable || colorReliefDrawable || hillshadePrepareDrawable || hillshadeDrawable) {
             if (!rasterTexturePosReader.read(static_cast<std::uint16_t>(i), meshVertices[i].rasterTexturePos[0], meshVertices[i].rasterTexturePos[1])) {
                 return;
             }
+        } else if (heatmapDrawable) {
+            std::array<float, 2> weight = {heatmapWeight, heatmapWeight};
+            std::array<float, 2> radius = {heatmapRadius, heatmapRadius};
+            heatmapWeightReader.read(static_cast<std::uint16_t>(i), weight);
+            heatmapRadiusReader.read(static_cast<std::uint16_t>(i), radius);
+            meshVertices[i].heatmapWeight[0] = weight[0];
+            meshVertices[i].heatmapWeight[1] = weight[1];
+            meshVertices[i].heatmapRadius[0] = radius[0];
+            meshVertices[i].heatmapRadius[1] = radius[1];
         } else if (fillExtrusionDrawable) {
             std::array<std::int16_t, 4> normalEd;
             if (!fillExtrusionNormalReader.read(static_cast<std::uint16_t>(i), normalEd)) {
@@ -2852,12 +3408,40 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
     std::memset(uniforms->writable_data(), 0, uniforms->size());
     writeUniform(uniforms, *specification, "u_matrix", matrix.data(), matrix.size() * sizeof(float));
     writeUniform(uniforms, *specification, "u_viewport", viewport, sizeof(viewport));
-    if (circleDrawable) {
+    if (symbolIconDrawable) {
+        const float cameraToCenterDistance = parameters.state.getCameraToCenterDistance();
+        const float symbolFadeChange = parameters.symbolFadeChange;
+        const float aspectRatio = parameters.state.getSize().aspectRatio();
+        writeUniform(uniforms, *specification, "u_label_plane_matrix", symbolLabelPlaneMatrix.data(), symbolLabelPlaneMatrix.size() * sizeof(float));
+        writeUniform(uniforms, *specification, "u_coord_matrix", symbolCoordMatrix.data(), symbolCoordMatrix.size() * sizeof(float));
+        writeUniform(uniforms, *specification, "u_camera_to_center_distance", &cameraToCenterDistance, sizeof(cameraToCenterDistance));
+        writeUniform(uniforms, *specification, "u_symbol_fade_change", &symbolFadeChange, sizeof(symbolFadeChange));
+        writeUniform(uniforms, *specification, "u_aspect_ratio", &aspectRatio, sizeof(aspectRatio));
+        writeUniform(uniforms, *specification, "u_rotate_symbol", &symbolRotateSymbol, sizeof(symbolRotateSymbol));
+        writeUniform(uniforms, *specification, "u_pitch_with_map", &symbolPitchWithMap, sizeof(symbolPitchWithMap));
+        writeUniform(uniforms, *specification, "u_is_size_zoom_constant", &symbolIsSizeZoomConstant, sizeof(symbolIsSizeZoomConstant));
+        writeUniform(uniforms, *specification, "u_is_size_feature_constant", &symbolIsSizeFeatureConstant, sizeof(symbolIsSizeFeatureConstant));
+        writeUniform(uniforms, *specification, "u_is_offset", &symbolIsOffset, sizeof(symbolIsOffset));
+        writeUniform(uniforms, *specification, "u_size_t", &symbolSizeT, sizeof(symbolSizeT));
+        writeUniform(uniforms, *specification, "u_size", &symbolSize, sizeof(symbolSize));
+        writeUniform(uniforms, *specification, "u_opacity_t", &symbolOpacityT, sizeof(symbolOpacityT));
+        writeUniform(uniforms, *specification, "u_texsize", symbolTexsize.data(), symbolTexsize.size() * sizeof(float));
+    } else if (circleDrawable) {
         const float cameraToCenterDistance = parameters.state.getCameraToCenterDistance();
         writeUniform(uniforms, *specification, "u_extrude_scale", circleExtrudeScale.data(), circleExtrudeScale.size() * sizeof(float));
         writeUniform(uniforms, *specification, "u_camera_to_center_distance", &cameraToCenterDistance, sizeof(cameraToCenterDistance));
         writeUniform(uniforms, *specification, "u_scale_with_map", &circleScaleWithMap, sizeof(circleScaleWithMap));
         writeUniform(uniforms, *specification, "u_pitch_with_map", &circlePitchWithMap, sizeof(circlePitchWithMap));
+    } else if (heatmapDrawable) {
+        writeUniform(uniforms, *specification, "u_extrude_scale", &heatmapExtrudeScale, sizeof(heatmapExtrudeScale));
+        writeUniform(uniforms, *specification, "u_weight", &heatmapWeight, sizeof(heatmapWeight));
+        writeUniform(uniforms, *specification, "u_radius", &heatmapRadius, sizeof(heatmapRadius));
+        writeUniform(uniforms, *specification, "u_intensity", &heatmapIntensity, sizeof(heatmapIntensity));
+        writeUniform(uniforms, *specification, "u_weight_t", &heatmapWeightT, sizeof(heatmapWeightT));
+        writeUniform(uniforms, *specification, "u_radius_t", &heatmapRadiusT, sizeof(heatmapRadiusT));
+    } else if (heatmapTextureDrawable) {
+        writeUniform(uniforms, *specification, "u_world_size", viewport, sizeof(viewport));
+        writeUniform(uniforms, *specification, "u_opacity", &heatmapTextureOpacity, sizeof(heatmapTextureOpacity));
     } else if (hillshadePrepareDrawable) {
         writeUniform(uniforms, *specification, "u_unpack", hillshadeUnpack.data(), hillshadeUnpack.size() * sizeof(float));
         writeUniform(uniforms, *specification, "u_dimension", hillshadeDimension.data(), hillshadeDimension.size() * sizeof(float));
@@ -2933,7 +3517,56 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
 
     std::array<SkMesh::ChildPtr, 3> children;
     std::size_t childCount = 0;
-    if (hillshadePrepareDrawable || hillshadeDrawable) {
+    if (symbolIconDrawable) {
+        if (!symbolImageTexture) {
+            return;
+        }
+        auto& texture = static_cast<Texture2D&>(*symbolImageTexture);
+        if (texture.needsUpload()) {
+            texture.upload();
+        }
+        const auto& image = texture.getImage();
+        if (!image) {
+            return;
+        }
+        const auto filterMode = texture.getSamplerState().filter == gfx::TextureFilterType::Nearest ? SkFilterMode::kNearest
+                                                                                                     : SkFilterMode::kLinear;
+        auto imageShader = image->makeShader(SkTileMode::kClamp,
+                                             SkTileMode::kClamp,
+                                             SkSamplingOptions(filterMode));
+        if (!imageShader) {
+            return;
+        }
+        children[0] = std::move(imageShader);
+        childCount = 1;
+    } else if (heatmapTextureDrawable) {
+        if (!heatmapImageTexture || !heatmapColorRampTexture) {
+            return;
+        }
+        auto& imageTexture = static_cast<Texture2D&>(*heatmapImageTexture);
+        auto& rampTexture = static_cast<Texture2D&>(*heatmapColorRampTexture);
+        if (imageTexture.needsUpload()) imageTexture.upload();
+        if (rampTexture.needsUpload()) rampTexture.upload();
+        const auto& image = imageTexture.getImage();
+        const auto& ramp = rampTexture.getImage();
+        if (!image || !ramp) {
+            return;
+        }
+        const float imageSize[2] = {static_cast<float>(image->width()), static_cast<float>(image->height())};
+        writeUniform(uniforms, *specification, "u_image_size", imageSize, sizeof(imageSize));
+        auto imageShader = image->makeRawShader(SkTileMode::kClamp,
+                                                SkTileMode::kClamp,
+                                                SkSamplingOptions(SkFilterMode::kLinear));
+        auto rampShader = ramp->makeRawShader(SkTileMode::kClamp,
+                                              SkTileMode::kClamp,
+                                              SkSamplingOptions(SkFilterMode::kLinear));
+        if (!imageShader || !rampShader) {
+            return;
+        }
+        children[0] = std::move(imageShader);
+        children[1] = std::move(rampShader);
+        childCount = 2;
+    } else if (hillshadePrepareDrawable || hillshadeDrawable) {
         if (!hillshadeImageTexture) {
             return;
         }
@@ -3188,6 +3821,9 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
 
     SkPaint paint;
     paint.setAntiAlias(true);
+    if (heatmapDrawable) {
+        paint.setBlendMode(SkBlendMode::kPlus);
+    }
 
     for (const auto& segment : segments) {
         if (!segment || segment->getMode().type != gfx::DrawModeType::Triangles) {

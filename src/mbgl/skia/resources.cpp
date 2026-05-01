@@ -172,6 +172,13 @@ void Texture2D::setImageSnapshot(sk_sp<SkImage> image_) {
     dirty = false;
 }
 
+const sk_sp<SkImage>& Texture2D::getImage() const {
+    if (snapshotSource) {
+        skImage = snapshotSource->makeImageSnapshot();
+    }
+    return skImage;
+}
+
 void DynamicTexture::uploadImage(const uint8_t* pixelData, gfx::TextureHandle& texHandle) {
     const auto& rect = texHandle.getRectangle();
     static_cast<Texture2D&>(*texture).uploadSubRegion(pixelData, {rect.w, rect.h}, rect.x, rect.y);
@@ -218,6 +225,7 @@ PremultipliedImage OffscreenTexture::readStillImage() {
 const gfx::Texture2DPtr& OffscreenTexture::getTexture() {
     if (auto* surface = getSkiaResource().getSurface()) {
         static_cast<Texture2D&>(*texture).setImageSnapshot(surface->makeImageSnapshot());
+        static_cast<Texture2D&>(*texture).setSnapshotSource(surface);
     }
     return texture;
 }
