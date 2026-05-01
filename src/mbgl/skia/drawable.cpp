@@ -1717,11 +1717,14 @@ sk_sp<SkMeshSpecification> symbolSDFMeshSpecification() {
                                     {Attribute::Type::kFloat4, offsetof(MeshVertex, symbolData), SkString("a_data")},
                                     {Attribute::Type::kFloat4, offsetof(MeshVertex, symbolPixelOffset), SkString("a_pixel_offset")},
                                     {Attribute::Type::kFloat3, offsetof(MeshVertex, symbolProjectedPos), SkString("a_projected_pos")},
-                                    {Attribute::Type::kFloat, offsetof(MeshVertex, symbolFadeOpacity), SkString("a_fade_opacity")}};
-    const Varying varyings[] = {{Varying::Type::kFloat2, SkString("tex")},
-                                {Varying::Type::kFloat, SkString("gamma_scale")},
-                                {Varying::Type::kFloat, SkString("font_scale")},
-                                {Varying::Type::kFloat, SkString("fade_opacity")}};
+                                    {Attribute::Type::kFloat, offsetof(MeshVertex, symbolFadeOpacity), SkString("a_fade_opacity")},
+                                    {Attribute::Type::kFloat4, offsetof(MeshVertex, symbolFillColor), SkString("a_fill_color")},
+                                    {Attribute::Type::kFloat4, offsetof(MeshVertex, symbolHaloColor), SkString("a_halo_color")},
+                                    {Attribute::Type::kFloat4, offsetof(MeshVertex, symbolHaloWidth), SkString("a_paint")}};
+    const Varying varyings[] = {{Varying::Type::kFloat4, SkString("geometry")},
+                                {Varying::Type::kFloat4, SkString("fill_color")},
+                                {Varying::Type::kFloat4, SkString("halo_color")},
+                                {Varying::Type::kFloat4, SkString("paint")}};
 
     const SkString vertexShader(R"(
         const float c_offscreen_degenerate_triangle_location = -2.0;
@@ -1815,10 +1818,10 @@ sk_sp<SkMeshSpecification> symbolSDFMeshSpecification() {
             float4 position = u_coord_matrix * float4(pos0, 0.0, 1.0);
 
             varyings.position = project_to_screen(position);
-            varyings.tex = a_tex;
-            varyings.gamma_scale = position.w;
-            varyings.font_scale = font_scale;
-            varyings.fade_opacity = fade_opacity;
+            varyings.geometry = float4(a_tex, position.w, font_scale);
+            varyings.fill_color = attrs.a_fill_color;
+            varyings.halo_color = attrs.a_halo_color;
+            varyings.paint = float4(attrs.a_paint.xyz, fade_opacity);
             return varyings;
         }
     )");
@@ -1829,31 +1832,205 @@ sk_sp<SkMeshSpecification> symbolSDFMeshSpecification() {
         uniform float u_device_pixel_ratio;
         uniform float u_is_halo;
         uniform float u_gamma_scale;
-        uniform float4 u_fill_color;
-        uniform float4 u_halo_color;
-        uniform float u_opacity;
-        uniform float u_halo_width;
-        uniform float u_halo_blur;
 
         float2 main(const Varyings varyings, out half4 color) {
             float edge_gamma = 0.105 / u_device_pixel_ratio;
-            float font_gamma = varyings.font_scale * u_gamma_scale;
+            float font_scale = varyings.geometry.w;
+            float font_gamma = font_scale * u_gamma_scale;
             float fill_gamma = edge_gamma / font_gamma;
-            float halo_gamma = (u_halo_blur * 1.19 / SDF_PX + edge_gamma) / font_gamma;
+            float opacity = varyings.paint.x;
+            float halo_width = varyings.paint.y;
+            float halo_blur = varyings.paint.z;
+            float fade_opacity = varyings.paint.w;
+            float halo_gamma = (halo_blur * 1.19 / SDF_PX + edge_gamma) / font_gamma;
             float gamma = u_is_halo >= 0.5 ? halo_gamma : fill_gamma;
-            float gamma_scaled = gamma * varyings.gamma_scale;
-            float4 symbol_color = u_is_halo >= 0.5 ? u_halo_color : u_fill_color;
+            float gamma_scaled = gamma * varyings.geometry.z;
+            float4 symbol_color = u_is_halo >= 0.5 ? varyings.halo_color : varyings.fill_color;
             float fill_inner_edge = (256.0 - 64.0) / 256.0;
             float halo_inner_edge = fill_inner_edge + halo_gamma * u_gamma_scale;
             float inner_edge = u_is_halo >= 0.5 ? halo_inner_edge : fill_inner_edge;
-            float4 sample = u_image.eval(varyings.tex);
+            float4 sample = u_image.eval(varyings.geometry.xy);
             float dist = max(max(sample.r, sample.g), max(sample.b, sample.a));
             float alpha = smoothstep(inner_edge - gamma_scaled, inner_edge + gamma_scaled, dist);
             if (u_is_halo >= 0.5) {
-                float halo_edge = (6.0 - u_halo_width / varyings.font_scale) / SDF_PX;
+                float halo_edge = (6.0 - halo_width / font_scale) / SDF_PX;
                 alpha = min(smoothstep(halo_edge - gamma_scaled, halo_edge + gamma_scaled, dist), 1.0 - alpha);
             }
-            color = half4(symbol_color * (alpha * u_opacity * varyings.fade_opacity));
+            color = half4(symbol_color * (alpha * opacity * fade_opacity));
+            return varyings.position;
+        }
+    )");
+
+    auto [spec, error] = SkMeshSpecification::Make(attributes,
+                                                    sizeof(MeshVertex),
+                                                    varyings,
+                                                    vertexShader,
+                                                    fragmentShader,
+                                                    SkColorSpace::MakeSRGB(),
+                                                    kPremul_SkAlphaType);
+    (void)error;
+    specification = std::move(spec);
+    return specification;
+}
+
+sk_sp<SkMeshSpecification> symbolTextAndIconMeshSpecification() {
+    static sk_sp<SkMeshSpecification> specification;
+    if (specification) {
+        return specification;
+    }
+
+    using Attribute = SkMeshSpecification::Attribute;
+    using Varying = SkMeshSpecification::Varying;
+    const Attribute attributes[] = {{Attribute::Type::kFloat4, offsetof(MeshVertex, symbolPosOffset), SkString("a_pos_offset")},
+                                    {Attribute::Type::kFloat4, offsetof(MeshVertex, symbolData), SkString("a_data")},
+                                    {Attribute::Type::kFloat3, offsetof(MeshVertex, symbolProjectedPos), SkString("a_projected_pos")},
+                                    {Attribute::Type::kFloat, offsetof(MeshVertex, symbolFadeOpacity), SkString("a_fade_opacity")},
+                                    {Attribute::Type::kFloat4, offsetof(MeshVertex, symbolFillColor), SkString("a_fill_color")},
+                                    {Attribute::Type::kFloat4, offsetof(MeshVertex, symbolHaloColor), SkString("a_halo_color")},
+                                    {Attribute::Type::kFloat4, offsetof(MeshVertex, symbolHaloWidth), SkString("a_paint")}};
+    const Varying varyings[] = {{Varying::Type::kFloat4, SkString("geometry")},
+                                {Varying::Type::kFloat4, SkString("fill_color")},
+                                {Varying::Type::kFloat4, SkString("halo_color")},
+                                {Varying::Type::kFloat4, SkString("paint")}};
+
+    const SkString vertexShader(R"(
+        const float c_offscreen_degenerate_triangle_location = -2.0;
+
+        uniform float4x4 u_matrix;
+        uniform float4x4 u_label_plane_matrix;
+        uniform float4x4 u_coord_matrix;
+        uniform float2 u_viewport;
+        uniform float u_camera_to_center_distance;
+        uniform float u_symbol_fade_change;
+        uniform float u_aspect_ratio;
+        uniform float u_rotate_symbol;
+        uniform float u_pitch_with_map;
+        uniform float u_is_size_zoom_constant;
+        uniform float u_is_size_feature_constant;
+        uniform float u_is_offset;
+        uniform float u_size_t;
+        uniform float u_size;
+
+        float2 unpack_opacity(float packed_opacity) {
+            float value = floor(packed_opacity);
+            return float2(floor(value / 2.0) / 127.0, mod(value, 2.0));
+        }
+
+        float2 project_to_screen(float4 position) {
+            float inv_w = position.w == 0.0 ? 1.0 : 1.0 / position.w;
+            float2 ndc = position.xy * inv_w;
+            return float2((ndc.x * 0.5 + 0.5) * u_viewport.x,
+                          (0.5 - ndc.y * 0.5) * u_viewport.y);
+        }
+
+        Varyings main(const Attributes attrs) {
+            Varyings varyings;
+
+            float2 raw_fade_opacity = unpack_opacity(attrs.a_fade_opacity);
+            float fade_change = raw_fade_opacity.y > 0.5 ? u_symbol_fade_change : -u_symbol_fade_change;
+            float fade_opacity = clamp(raw_fade_opacity.x + fade_change, 0.0, 1.0);
+            if (fade_opacity == 0.0) {
+                varyings.position = float2(c_offscreen_degenerate_triangle_location,
+                                           c_offscreen_degenerate_triangle_location);
+                return varyings;
+            }
+
+            float2 a_pos = attrs.a_pos_offset.xy;
+            float2 a_offset = attrs.a_pos_offset.zw;
+            float2 a_tex = attrs.a_data.xy;
+            float2 a_size = attrs.a_data.zw;
+            float a_size_min = floor(a_size.x * 0.5);
+            float is_sdf = a_size.x - 2.0 * a_size_min;
+            float segment_angle = -attrs.a_projected_pos.z;
+
+            float size;
+            if (u_is_size_zoom_constant < 0.5 && u_is_size_feature_constant < 0.5) {
+                size = mix(a_size_min, a_size.y, u_size_t) / 128.0;
+            } else if (u_is_size_zoom_constant >= 0.5 && u_is_size_feature_constant < 0.5) {
+                size = a_size_min / 128.0;
+            } else {
+                size = u_size;
+            }
+
+            float4 projected_point = u_matrix * float4(a_pos, 0.0, 1.0);
+            float camera_to_anchor_distance = projected_point.w;
+            float distance_ratio = u_pitch_with_map >= 0.5
+                ? camera_to_anchor_distance / u_camera_to_center_distance
+                : u_camera_to_center_distance / camera_to_anchor_distance;
+            float perspective_ratio = clamp(0.5 + 0.5 * distance_ratio, 0.0, 4.0);
+            if (u_is_offset < 0.5) {
+                size *= perspective_ratio;
+            }
+
+            float font_scale = size / 24.0;
+
+            float symbol_rotation = 0.0;
+            if (u_rotate_symbol >= 0.5) {
+                float4 offset_projected_point = u_matrix * float4(a_pos + float2(1.0, 0.0), 0.0, 1.0);
+                float2 a = projected_point.xy / projected_point.w;
+                float2 b = offset_projected_point.xy / offset_projected_point.w;
+                symbol_rotation = atan((b.y - a.y) / u_aspect_ratio, b.x - a.x);
+            }
+
+            float angle = segment_angle + symbol_rotation;
+            float angle_sin = sin(angle);
+            float angle_cos = cos(angle);
+
+            float4 projected_pos = u_label_plane_matrix * float4(attrs.a_projected_pos.xy, 0.0, 1.0);
+            float2 pos_rot = a_offset / 32.0 * font_scale;
+            float2 rotated_offset = float2(angle_cos * pos_rot.x - angle_sin * pos_rot.y,
+                                           angle_sin * pos_rot.x + angle_cos * pos_rot.y);
+            float2 pos0 = projected_pos.xy / projected_pos.w + rotated_offset;
+            float4 position = u_coord_matrix * float4(pos0, 0.0, 1.0);
+
+            varyings.position = project_to_screen(position);
+            varyings.geometry = float4(a_tex, position.w, is_sdf < 0.5 ? -font_scale : font_scale);
+            varyings.fill_color = attrs.a_fill_color;
+            varyings.halo_color = attrs.a_halo_color;
+            varyings.paint = float4(attrs.a_paint.xyz, fade_opacity);
+            return varyings;
+        }
+    )");
+
+    const SkString fragmentShader(R"(
+        const float SDF_PX = 8.0;
+        uniform shader u_image;
+        uniform shader u_icon_image;
+        uniform float u_device_pixel_ratio;
+        uniform float u_is_halo;
+        uniform float u_gamma_scale;
+
+        float2 main(const Varyings varyings, out half4 color) {
+            float2 tex = varyings.geometry.xy;
+            float font_scale = abs(varyings.geometry.w);
+            float opacity = varyings.paint.x;
+            float halo_width = varyings.paint.y;
+            float halo_blur = varyings.paint.z;
+            float fade_opacity = varyings.paint.w;
+
+            if (varyings.geometry.w < 0.0) {
+                color = half4(u_icon_image.eval(tex) * (opacity * fade_opacity));
+                return varyings.position;
+            }
+
+            float edge_gamma = 0.105 / u_device_pixel_ratio;
+            float font_gamma = font_scale * u_gamma_scale;
+            float fill_gamma = edge_gamma / font_gamma;
+            float halo_gamma = (halo_blur * 1.19 / SDF_PX + edge_gamma) / font_gamma;
+            float gamma = u_is_halo >= 0.5 ? halo_gamma : fill_gamma;
+            float gamma_scaled = gamma * varyings.geometry.z;
+            float4 symbol_color = u_is_halo >= 0.5 ? varyings.halo_color : varyings.fill_color;
+            float fill_inner_edge = (256.0 - 64.0) / 256.0;
+            float halo_inner_edge = fill_inner_edge + halo_gamma * u_gamma_scale;
+            float inner_edge = u_is_halo >= 0.5 ? halo_inner_edge : fill_inner_edge;
+            float4 sample = u_image.eval(tex);
+            float dist = max(max(sample.r, sample.g), max(sample.b, sample.a));
+            float alpha = smoothstep(inner_edge - gamma_scaled, inner_edge + gamma_scaled, dist);
+            if (u_is_halo >= 0.5) {
+                float halo_edge = (6.0 - halo_width / font_scale) / SDF_PX;
+                alpha = min(smoothstep(halo_edge - gamma_scaled, halo_edge + gamma_scaled, dist), 1.0 - alpha);
+            }
+            color = half4(symbol_color * (alpha * opacity * fade_opacity));
             return varyings.position;
         }
     )");
@@ -2151,6 +2328,7 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
     bool heatmapTextureDrawable = false;
     bool symbolIconDrawable = false;
     bool symbolSDFDrawable = false;
+    bool symbolTextAndIconDrawable = false;
     bool hillshadePrepareDrawable = false;
     bool hillshadeDrawable = false;
     std::array<float, 4> colorReliefUnpack = {1.0f, 0.0f, 0.0f, 0.0f};
@@ -2311,7 +2489,8 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
             tilePropsUBO = getUBO<shaders::SymbolTilePropsUBO>(&getUniformBuffers(), shaders::idSymbolTilePropsUBO);
         }
         if (drawableUBO && tilePropsUBO) {
-            symbolSDFDrawable = true;
+            symbolTextAndIconDrawable = symbolImageTexture && symbolImageIconTexture;
+            symbolSDFDrawable = !symbolTextAndIconDrawable;
             matrix = drawableUBO->matrix;
             symbolLabelPlaneMatrix = drawableUBO->label_plane_matrix;
             symbolCoordMatrix = drawableUBO->coord_matrix;
@@ -2832,7 +3011,7 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
                                                         : ((hillshadePrepareDrawable || hillshadeDrawable) ? static_cast<std::size_t>(shaders::idHillshadePosVertexAttribute)
                                                         : (colorReliefDrawable ? static_cast<std::size_t>(shaders::idColorReliefPosVertexAttribute)
                                                           : (fillExtrusionDrawable ? static_cast<std::size_t>(shaders::idFillExtrusionPosVertexAttribute)
-                                                          : ((symbolIconDrawable || symbolSDFDrawable) ? static_cast<std::size_t>(shaders::idSymbolPosOffsetVertexAttribute)
+                                                        : ((symbolIconDrawable || symbolSDFDrawable || symbolTextAndIconDrawable) ? static_cast<std::size_t>(shaders::idSymbolPosOffsetVertexAttribute)
                                                           : (rasterDrawable ? static_cast<std::size_t>(shaders::idRasterPosVertexAttribute) : (circleDrawable ? static_cast<std::size_t>(shaders::idCirclePosVertexAttribute) : (lineDrawable
                                                                                                                                                              ? static_cast<std::size_t>(shaders::idLinePosNormalVertexAttribute)
                                                                                                                                                              : static_cast<std::size_t>(shaders::idFillPosVertexAttribute))))))));
@@ -2857,6 +3036,7 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
 
     const auto specification = [&] {
         if (symbolIconDrawable) return symbolIconMeshSpecification();
+        if (symbolTextAndIconDrawable) return symbolTextAndIconMeshSpecification();
         if (symbolSDFDrawable) return symbolSDFMeshSpecification();
         if (heatmapTextureDrawable) return heatmapTextureMeshSpecification();
         if (heatmapDrawable) return heatmapMeshSpecification();
@@ -2914,7 +3094,7 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
     VertexReader rasterTexturePosReader;
     UShort4Reader fillPatternFromReader;
     UShort4Reader fillPatternToReader;
-    if (symbolIconDrawable || symbolSDFDrawable) {
+    if (symbolIconDrawable || symbolSDFDrawable || symbolTextAndIconDrawable) {
         if (const auto& attrs = getVertexAttributes()) {
             const auto initShort4Reader = [](const gfx::VertexAttribute& attr, Short4Reader& reader) {
                 if (attr.getSharedRawData() && attr.getSharedType() == gfx::AttributeDataType::Short4) {
@@ -2986,11 +3166,13 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
 
             if (const auto& attr = attrs->get(shaders::idSymbolPosOffsetVertexAttribute)) initShort4Reader(*attr, symbolPosOffsetReader);
             if (const auto& attr = attrs->get(shaders::idSymbolDataVertexAttribute)) initUShort4Reader(*attr, symbolDataReader);
-            if (const auto& attr = attrs->get(shaders::idSymbolPixelOffsetVertexAttribute)) initShort4Reader(*attr, symbolPixelOffsetReader);
+            if (!symbolTextAndIconDrawable) {
+                if (const auto& attr = attrs->get(shaders::idSymbolPixelOffsetVertexAttribute)) initShort4Reader(*attr, symbolPixelOffsetReader);
+            }
             if (const auto& attr = attrs->get(shaders::idSymbolProjectedPosVertexAttribute)) initFloat3Reader(*attr, symbolProjectedPosReader);
             if (const auto& attr = attrs->get(shaders::idSymbolFadeOpacityVertexAttribute)) initFloatReader(*attr, symbolFadeOpacityReader);
             if (const auto& attr = attrs->get(shaders::idSymbolOpacityVertexAttribute)) initFloat2Reader(*attr, symbolOpacityReader);
-            if (symbolSDFDrawable) {
+            if (symbolSDFDrawable || symbolTextAndIconDrawable) {
                 const auto initFloat4Reader = [](const gfx::VertexAttribute& attr, Float4Reader& reader) {
                     reader.attribute = &attr;
                     if (attr.getSharedRawData() && (attr.getSharedType() == gfx::AttributeDataType::Float4 ||
@@ -3014,7 +3196,7 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
                 if (const auto& attr = attrs->get(shaders::idSymbolHaloBlurVertexAttribute)) initFloat2Reader(*attr, symbolHaloBlurReader);
             }
         }
-        if (!symbolPosOffsetReader.data || !symbolDataReader.data || !symbolPixelOffsetReader.data ||
+        if (!symbolPosOffsetReader.data || !symbolDataReader.data || (!symbolTextAndIconDrawable && !symbolPixelOffsetReader.data) ||
             !symbolProjectedPosReader.data || !symbolFadeOpacityReader.data) {
             return;
         }
@@ -3261,15 +3443,15 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
         if (!vertexReader.read(static_cast<std::uint16_t>(i), meshVertices[i].position[0], meshVertices[i].position[1])) {
             return;
         }
-        if (symbolIconDrawable || symbolSDFDrawable) {
+        if (symbolIconDrawable || symbolSDFDrawable || symbolTextAndIconDrawable) {
             std::array<std::int16_t, 4> posOffset;
             std::array<float, 4> data;
-            std::array<std::int16_t, 4> pixelOffset;
+            std::array<std::int16_t, 4> pixelOffset{};
             std::array<float, 3> projectedPos;
             float fadeOpacity = 0.0f;
             if (!symbolPosOffsetReader.read(static_cast<std::uint16_t>(i), posOffset) ||
                 !symbolDataReader.read(static_cast<std::uint16_t>(i), data) ||
-                !symbolPixelOffsetReader.read(static_cast<std::uint16_t>(i), pixelOffset) ||
+                (!symbolTextAndIconDrawable && !symbolPixelOffsetReader.read(static_cast<std::uint16_t>(i), pixelOffset)) ||
                 !symbolProjectedPosReader.read(static_cast<std::uint16_t>(i), projectedPos) ||
                 !symbolFadeOpacityReader.read(static_cast<std::uint16_t>(i), fadeOpacity)) {
                 return;
@@ -3287,11 +3469,12 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
             meshVertices[i].symbolFadeOpacity = fadeOpacity;
             meshVertices[i].symbolOpacity[0] = opacity[0];
             meshVertices[i].symbolOpacity[1] = opacity[1];
-            if (symbolSDFDrawable) {
+            if (symbolSDFDrawable || symbolTextAndIconDrawable) {
                 auto fillColor = symbolFillColor;
                 auto haloColor = symbolHaloColor;
                 auto haloWidth = symbolHaloWidth;
                 auto haloBlur = symbolHaloBlur;
+                const auto vertexOpacity = unpackMixFloat(opacity, symbolOpacityT);
                 std::array<float, 4> packedFillColor;
                 if (symbolFillColorReader.read(static_cast<std::uint16_t>(i), packedFillColor)) fillColor = unpackMixColor(packedFillColor, symbolFillColorT);
                 std::array<float, 4> packedHaloColor;
@@ -3308,7 +3491,7 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
                 meshVertices[i].symbolHaloColor[1] = haloColor.fG;
                 meshVertices[i].symbolHaloColor[2] = haloColor.fB;
                 meshVertices[i].symbolHaloColor[3] = haloColor.fA;
-                meshVertices[i].symbolHaloWidth[0] = haloWidth;
+                meshVertices[i].symbolHaloWidth[0] = vertexOpacity;
                 meshVertices[i].symbolHaloWidth[1] = haloWidth;
                 meshVertices[i].symbolHaloBlur[0] = haloBlur;
                 meshVertices[i].symbolHaloBlur[1] = haloBlur;
@@ -3688,7 +3871,7 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
     std::memset(uniforms->writable_data(), 0, uniforms->size());
     writeUniform(uniforms, *specification, "u_matrix", matrix.data(), matrix.size() * sizeof(float));
     writeUniform(uniforms, *specification, "u_viewport", viewport, sizeof(viewport));
-    if (symbolIconDrawable || symbolSDFDrawable) {
+    if (symbolIconDrawable || symbolSDFDrawable || symbolTextAndIconDrawable) {
         const float cameraToCenterDistance = parameters.state.getCameraToCenterDistance();
         const float symbolFadeChange = parameters.symbolFadeChange;
         const float aspectRatio = parameters.state.getSize().aspectRatio();
@@ -3704,15 +3887,15 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
         writeUniform(uniforms, *specification, "u_is_offset", &symbolIsOffset, sizeof(symbolIsOffset));
         writeUniform(uniforms, *specification, "u_size_t", &symbolSizeT, sizeof(symbolSizeT));
         writeUniform(uniforms, *specification, "u_size", &symbolSize, sizeof(symbolSize));
+    }
+    if (symbolIconDrawable) {
         writeUniform(uniforms, *specification, "u_opacity_t", &symbolOpacityT, sizeof(symbolOpacityT));
         writeUniform(uniforms, *specification, "u_texsize", symbolTexsize.data(), symbolTexsize.size() * sizeof(float));
-    } else if (symbolSDFDrawable) {
+    } else if (symbolSDFDrawable || symbolTextAndIconDrawable) {
         const float cameraToCenterDistance = parameters.state.getCameraToCenterDistance();
         const float symbolFadeChange = parameters.symbolFadeChange;
         const float aspectRatio = parameters.state.getSize().aspectRatio();
         const float devicePixelRatio = parameters.pixelRatio;
-        const float fillColor[4] = {symbolFillColor.fR, symbolFillColor.fG, symbolFillColor.fB, symbolFillColor.fA};
-        const float haloColor[4] = {symbolHaloColor.fR, symbolHaloColor.fG, symbolHaloColor.fB, symbolHaloColor.fA};
         writeUniform(uniforms, *specification, "u_label_plane_matrix", symbolLabelPlaneMatrix.data(), symbolLabelPlaneMatrix.size() * sizeof(float));
         writeUniform(uniforms, *specification, "u_coord_matrix", symbolCoordMatrix.data(), symbolCoordMatrix.size() * sizeof(float));
         writeUniform(uniforms, *specification, "u_camera_to_center_distance", &cameraToCenterDistance, sizeof(cameraToCenterDistance));
@@ -3734,11 +3917,6 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
         writeUniform(uniforms, *specification, "u_device_pixel_ratio", &devicePixelRatio, sizeof(devicePixelRatio));
         writeUniform(uniforms, *specification, "u_is_halo", &symbolIsHalo, sizeof(symbolIsHalo));
         writeUniform(uniforms, *specification, "u_gamma_scale", &symbolGammaScale, sizeof(symbolGammaScale));
-        writeUniform(uniforms, *specification, "u_fill_color", fillColor, sizeof(fillColor));
-        writeUniform(uniforms, *specification, "u_halo_color", haloColor, sizeof(haloColor));
-        writeUniform(uniforms, *specification, "u_opacity", &symbolOpacity, sizeof(symbolOpacity));
-        writeUniform(uniforms, *specification, "u_halo_width", &symbolHaloWidth, sizeof(symbolHaloWidth));
-        writeUniform(uniforms, *specification, "u_halo_blur", &symbolHaloBlur, sizeof(symbolHaloBlur));
     } else if (circleDrawable) {
         const float cameraToCenterDistance = parameters.state.getCameraToCenterDistance();
         writeUniform(uniforms, *specification, "u_extrude_scale", circleExtrudeScale.data(), circleExtrudeScale.size() * sizeof(float));
@@ -3830,7 +4008,40 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
 
     std::array<SkMesh::ChildPtr, 3> children;
     std::size_t childCount = 0;
-    if (symbolIconDrawable || symbolSDFDrawable) {
+    if (symbolTextAndIconDrawable) {
+        if (!symbolImageTexture || !symbolImageIconTexture) {
+            return;
+        }
+        auto& glyphTexture = static_cast<Texture2D&>(*symbolImageTexture);
+        auto& iconTexture = static_cast<Texture2D&>(*symbolImageIconTexture);
+        if (glyphTexture.needsUpload()) {
+            glyphTexture.upload();
+        }
+        if (iconTexture.needsUpload()) {
+            iconTexture.upload();
+        }
+        const auto& glyphImage = glyphTexture.getImage();
+        const auto& iconImage = iconTexture.getImage();
+        if (!glyphImage || !iconImage) {
+            return;
+        }
+        const auto glyphFilterMode = glyphTexture.getSamplerState().filter == gfx::TextureFilterType::Nearest ? SkFilterMode::kNearest
+                                                                                                              : SkFilterMode::kLinear;
+        const auto iconFilterMode = iconTexture.getSamplerState().filter == gfx::TextureFilterType::Nearest ? SkFilterMode::kNearest
+                                                                                                            : SkFilterMode::kLinear;
+        auto glyphShader = glyphImage->makeShader(SkTileMode::kClamp,
+                                                  SkTileMode::kClamp,
+                                                  SkSamplingOptions(glyphFilterMode));
+        auto iconShader = iconImage->makeShader(SkTileMode::kClamp,
+                                                SkTileMode::kClamp,
+                                                SkSamplingOptions(iconFilterMode));
+        if (!glyphShader || !iconShader) {
+            return;
+        }
+        children[0] = std::move(glyphShader);
+        children[1] = std::move(iconShader);
+        childCount = 2;
+    } else if (symbolIconDrawable || symbolSDFDrawable) {
         const auto& texturePtr = symbolImageTexture ? symbolImageTexture : symbolImageIconTexture;
         if (!texturePtr) {
             return;

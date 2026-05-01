@@ -1,5 +1,7 @@
 #include <mbgl/shaders/skia/shader_group.hpp>
 
+#include <mbgl/shaders/shader_defines.hpp>
+
 #include <mbgl/util/hash.hpp>
 
 namespace mbgl {
@@ -10,7 +12,10 @@ ShaderProgram::ShaderProgram(std::string name_)
 
 ShaderProgram::~ShaderProgram() noexcept = default;
 
-std::optional<size_t> ShaderProgram::getSamplerLocation(const size_t) const {
+std::optional<size_t> ShaderProgram::getSamplerLocation(const size_t id) const {
+    if (name.find("SymbolTextAndIconShader") != std::string::npos && id == shaders::idSymbolImageIconTexture) {
+        return 0;
+    }
     return std::nullopt;
 }
 

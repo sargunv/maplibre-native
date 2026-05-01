@@ -128,8 +128,8 @@
 - [x] Pass basic circle color/radius/opacity/blur/stroke render tests.
 - [ ] Pass circle render tests.
 - [x] Port symbol icon shader/render path.
-- [ ] Port symbol SDF text shader/render path.
-- [ ] Port symbol text-and-icon shader/render path.
+- [x] Port symbol SDF text shader/render path.
+- [x] Port symbol text-and-icon shader/render path.
 - [ ] Pass symbol icon render tests.
 - [ ] Pass symbol text render tests.
 - [ ] Implement collision debug drawing.
