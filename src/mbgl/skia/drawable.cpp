@@ -1832,7 +1832,7 @@ sk_sp<SkMeshSpecification> symbolSDFMeshSpecification() {
             float angle_cos = cos(angle);
 
             float4 projected_pos = u_label_plane_matrix * float4(attrs.a_projected_pos.xy, 0.0, 1.0);
-            float2 pos_rot = a_offset / 32.0 * font_scale + a_pxoffset / 16.0;
+            float2 pos_rot = a_offset / 32.0 * font_scale + a_pxoffset;
             float2 rotated_offset = float2(angle_cos * pos_rot.x - angle_sin * pos_rot.y,
                                            angle_sin * pos_rot.x + angle_cos * pos_rot.y);
             float2 pos0 = projected_pos.xy / projected_pos.w + rotated_offset;
@@ -2572,13 +2572,12 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
             const auto hasLineData = lineDataAttr->getSharedType() == gfx::AttributeDataType::UByte4 ||
                                      lineDataAttr->getDataType() == gfx::AttributeDataType::UByte4;
             const auto hasLinePos = linePosAttr && (linePosAttr->getSharedType() == gfx::AttributeDataType::Short2 ||
-                                                    linePosAttr->getDataType() == gfx::AttributeDataType::Short2 ||
-                                                    linePosAttr->getSharedType() == gfx::AttributeDataType::Short4 ||
-                                                    linePosAttr->getDataType() == gfx::AttributeDataType::Short4);
+                                                     linePosAttr->getDataType() == gfx::AttributeDataType::Short2 ||
+                                                     linePosAttr->getSharedType() == gfx::AttributeDataType::Short4 ||
+                                                     linePosAttr->getDataType() == gfx::AttributeDataType::Short4);
             hasLinePositionAttribute = hasLineData && (hasLinePositionAttribute || hasLinePos);
         }
     }
-
     if (getName().find("-collision/") != std::string::npos) {
         collisionBoxDrawable = getName().find("/box") != std::string::npos;
         collisionCircleDrawable = getName().find("/circle") != std::string::npos;
@@ -2761,7 +2760,7 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
                 colorReliefOpacity = props->opacity;
             }
         }
-    } else if (hasFillExtrusionPositionAttribute) {
+    } else if (hasFillExtrusionPositionAttribute && !hasLinePositionAttribute) {
         if (getName().find("/depth") != std::string::npos) {
             return;
         }
@@ -3972,7 +3971,6 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
     const auto& indexes = sharedIndexes->vector();
     const auto canvasSize = canvas->getBaseLayerSize();
     const float viewport[2] = {static_cast<float>(canvasSize.width()), static_cast<float>(canvasSize.height())};
-
     if (fillOutlinePatternDrawable) {
         if (!fillImageTexture) {
             return;
