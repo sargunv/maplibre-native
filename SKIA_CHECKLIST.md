@@ -132,7 +132,7 @@
 - [x] Port symbol text-and-icon shader/render path.
 - [ ] Pass symbol icon render tests.
 - [ ] Pass symbol text render tests.
-- [ ] Implement collision debug drawing.
+- [x] Implement collision debug drawing.
 - [ ] Pass collision debug render tests.
 - [x] Port heatmap accumulation pass.
 - [x] Port heatmap colorization pass.

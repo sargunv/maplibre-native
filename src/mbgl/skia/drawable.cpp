@@ -5,6 +5,7 @@
 #include <mbgl/skia/renderer_backend.hpp>
 #include <mbgl/shaders/background_layer_ubo.hpp>
 #include <mbgl/shaders/circle_layer_ubo.hpp>
+#include <mbgl/shaders/collision_layer_ubo.hpp>
 #include <mbgl/shaders/color_relief_layer_ubo.hpp>
 #include <mbgl/shaders/fill_extrusion_layer_ubo.hpp>
 #include <mbgl/shaders/fill_layer_ubo.hpp>
@@ -153,6 +154,22 @@ struct UShort4Reader {
     }
 };
 
+struct UShort2Reader {
+    const std::uint8_t* data = nullptr;
+    std::size_t count = 0;
+    std::size_t stride = 0;
+
+    bool read(std::uint16_t index, std::array<float, 2>& value) const {
+        if (!data || index >= count || stride < sizeof(std::uint16_t) * 2) {
+            return false;
+        }
+        std::uint16_t packed[2];
+        std::memcpy(packed, data + std::size_t(index) * stride, sizeof(packed));
+        value = {static_cast<float>(packed[0]), static_cast<float>(packed[1])};
+        return true;
+    }
+};
+
 struct MeshVertex {
     float position[2];
     float fillExtrusionZ;
@@ -181,6 +198,10 @@ struct MeshVertex {
     float symbolHaloColor[4];
     float symbolHaloWidth[2];
     float symbolHaloBlur[2];
+    float collisionAnchorPos[2];
+    float collisionExtrude[2];
+    float collisionPlaced[2];
+    float collisionShift[2];
     float fillPatternPosA[2];
     float fillPatternPosB[2];
     float fillPatternFrom[4];
@@ -2047,6 +2068,90 @@ sk_sp<SkMeshSpecification> symbolTextAndIconMeshSpecification() {
     return specification;
 }
 
+sk_sp<SkMeshSpecification> collisionCircleMeshSpecification() {
+    static sk_sp<SkMeshSpecification> specification;
+    if (specification) {
+        return specification;
+    }
+
+    using Attribute = SkMeshSpecification::Attribute;
+    using Varying = SkMeshSpecification::Varying;
+    const Attribute attributes[] = {{Attribute::Type::kFloat2, offsetof(MeshVertex, position), SkString("a_pos")},
+                                    {Attribute::Type::kFloat2, offsetof(MeshVertex, collisionAnchorPos), SkString("a_anchor_pos")},
+                                    {Attribute::Type::kFloat2, offsetof(MeshVertex, collisionExtrude), SkString("a_extrude")},
+                                    {Attribute::Type::kFloat2, offsetof(MeshVertex, collisionPlaced), SkString("a_placed")}};
+    const Varying varyings[] = {{Varying::Type::kFloat4, SkString("data")},
+                                {Varying::Type::kFloat4, SkString("extrude_data")}};
+
+    const SkString vertexShader(R"(
+        uniform float4x4 u_matrix;
+        uniform float2 u_viewport;
+        uniform float2 u_extrude_scale;
+        uniform float u_camera_to_center_distance;
+
+        float2 project_to_screen(float4 position) {
+            float inv_w = position.w == 0.0 ? 1.0 : 1.0 / position.w;
+            float2 ndc = position.xy * inv_w;
+            return float2((ndc.x * 0.5 + 0.5) * u_viewport.x,
+                          (0.5 - ndc.y * 0.5) * u_viewport.y);
+        }
+
+        Varyings main(const Attributes attrs) {
+            Varyings varyings;
+            float4 projected_point = u_matrix * float4(attrs.a_anchor_pos, 0.0, 1.0);
+            float camera_to_anchor_distance = projected_point.w;
+            float collision_perspective_ratio = clamp(
+                0.5 + 0.5 * (u_camera_to_center_distance / camera_to_anchor_distance), 0.0, 4.0);
+
+            float4 position = u_matrix * float4(attrs.a_pos, 0.0, 1.0);
+            float padding_factor = 1.2;
+            position.xy += attrs.a_extrude * u_extrude_scale * padding_factor * position.w * collision_perspective_ratio;
+
+            float radius = abs(attrs.a_extrude.y);
+            varyings.position = project_to_screen(position);
+            varyings.data = float4(attrs.a_placed, radius, collision_perspective_ratio);
+            varyings.extrude_data = float4(attrs.a_extrude * padding_factor,
+                                           u_extrude_scale * u_camera_to_center_distance * collision_perspective_ratio);
+            return varyings;
+        }
+    )");
+
+    const SkString fragmentShader(R"(
+        uniform float u_overscale_factor;
+
+        float2 main(const Varyings varyings, out half4 color) {
+            float alpha = 0.5;
+            float4 ring_color = float4(1.0, 0.0, 0.0, 1.0) * alpha;
+            if (varyings.data.x > 0.5) {
+                ring_color = float4(0.0, 0.0, 1.0, 0.5) * alpha;
+            }
+            if (varyings.data.y > 0.5) {
+                ring_color *= 0.2;
+            }
+
+            float extrude_scale_length = length(varyings.extrude_data.zw);
+            float extrude_length = length(varyings.extrude_data.xy) * extrude_scale_length;
+            float stroke_width = 15.0 * extrude_scale_length / u_overscale_factor;
+            float radius = varyings.data.z * extrude_scale_length;
+            float distance_to_edge = abs(extrude_length - radius);
+            float opacity_t = smoothstep(-stroke_width, 0.0, -distance_to_edge);
+            color = half4(opacity_t * ring_color);
+            return varyings.position;
+        }
+    )");
+
+    auto [spec, error] = SkMeshSpecification::Make(attributes,
+                                                    sizeof(MeshVertex),
+                                                    varyings,
+                                                    vertexShader,
+                                                    fragmentShader,
+                                                    SkColorSpace::MakeSRGB(),
+                                                    kPremul_SkAlphaType);
+    (void)error;
+    specification = std::move(spec);
+    return specification;
+}
+
 sk_sp<SkMeshSpecification> fillPatternMeshSpecification() {
     static sk_sp<SkMeshSpecification> specification;
     if (specification) {
@@ -2254,6 +2359,27 @@ std::array<float, 2> projectToScreen(const std::array<float, 16>& matrix,
     return {(ndcX * 0.5f + 0.5f) * viewport[0], (0.5f - ndcY * 0.5f) * viewport[1]};
 }
 
+std::array<float, 2> collisionPointToScreen(const std::array<float, 16>& matrix,
+                                            const float viewport[2],
+                                            const float cameraToCenterDistance,
+                                            const std::array<float, 2>& extrudeScale,
+                                            const MeshVertex& vertex) {
+    const auto anchorW = matrix[3] * vertex.collisionAnchorPos[0] +
+                         matrix[7] * vertex.collisionAnchorPos[1] + matrix[15];
+    const auto ratio = std::clamp(0.5f + 0.5f * (cameraToCenterDistance / anchorW), 0.0f, 4.0f);
+
+    auto clipX = matrix[0] * vertex.position[0] + matrix[4] * vertex.position[1] + matrix[12];
+    auto clipY = matrix[1] * vertex.position[0] + matrix[5] * vertex.position[1] + matrix[13];
+    const auto clipW = matrix[3] * vertex.position[0] + matrix[7] * vertex.position[1] + matrix[15];
+    clipX += (vertex.collisionExtrude[0] + vertex.collisionShift[0]) * extrudeScale[0] * clipW * ratio;
+    clipY += (vertex.collisionExtrude[1] + vertex.collisionShift[1]) * extrudeScale[1] * clipW * ratio;
+
+    const auto invW = clipW == 0.0f ? 1.0f : 1.0f / clipW;
+    const auto ndcX = clipX * invW;
+    const auto ndcY = clipY * invW;
+    return {(ndcX * 0.5f + 0.5f) * viewport[0], (0.5f - ndcY * 0.5f) * viewport[1]};
+}
+
 } // namespace
 
 Drawable::Drawable(std::string name)
@@ -2329,6 +2455,10 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
     bool symbolIconDrawable = false;
     bool symbolSDFDrawable = false;
     bool symbolTextAndIconDrawable = false;
+    bool collisionBoxDrawable = false;
+    bool collisionCircleDrawable = false;
+    std::array<float, 2> collisionExtrudeScale = {1.0f, 1.0f};
+    float collisionOverscaleFactor = 1.0f;
     bool hillshadePrepareDrawable = false;
     bool hillshadeDrawable = false;
     std::array<float, 4> colorReliefUnpack = {1.0f, 0.0f, 0.0f, 0.0f};
@@ -2449,7 +2579,17 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
         }
     }
 
-    if (getName().find("/icon") != std::string::npos && symbolImageTexture) {
+    if (getName().find("-collision/") != std::string::npos) {
+        collisionBoxDrawable = getName().find("/box") != std::string::npos;
+        collisionCircleDrawable = getName().find("/circle") != std::string::npos;
+        if (const auto* drawableUBO = getUBO<shaders::CollisionDrawableUBO>(&getUniformBuffers(), shaders::idCollisionDrawableUBO)) {
+            matrix = drawableUBO->matrix;
+        }
+        if (const auto* tilePropsUBO = getUBO<shaders::CollisionTilePropsUBO>(&getUniformBuffers(), shaders::idCollisionTilePropsUBO)) {
+            collisionExtrudeScale = tilePropsUBO->extrude_scale;
+            collisionOverscaleFactor = tilePropsUBO->overscale_factor;
+        }
+    } else if (getName().find("/icon") != std::string::npos && symbolImageTexture) {
         const shaders::SymbolDrawableUBO* drawableUBO = nullptr;
 #if MLN_UBO_CONSOLIDATION
         drawableUBO = getUBO<shaders::SymbolDrawableUBO>(layerUniforms, shaders::idSymbolDrawableUBO, getUBOIndex());
@@ -3011,10 +3151,11 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
                                                         : ((hillshadePrepareDrawable || hillshadeDrawable) ? static_cast<std::size_t>(shaders::idHillshadePosVertexAttribute)
                                                         : (colorReliefDrawable ? static_cast<std::size_t>(shaders::idColorReliefPosVertexAttribute)
                                                           : (fillExtrusionDrawable ? static_cast<std::size_t>(shaders::idFillExtrusionPosVertexAttribute)
+                                                          : ((collisionBoxDrawable || collisionCircleDrawable) ? static_cast<std::size_t>(shaders::idCollisionPosVertexAttribute)
                                                         : ((symbolIconDrawable || symbolSDFDrawable || symbolTextAndIconDrawable) ? static_cast<std::size_t>(shaders::idSymbolPosOffsetVertexAttribute)
                                                           : (rasterDrawable ? static_cast<std::size_t>(shaders::idRasterPosVertexAttribute) : (circleDrawable ? static_cast<std::size_t>(shaders::idCirclePosVertexAttribute) : (lineDrawable
                                                                                                                                                              ? static_cast<std::size_t>(shaders::idLinePosNormalVertexAttribute)
-                                                                                                                                                             : static_cast<std::size_t>(shaders::idFillPosVertexAttribute))))))));
+                                                                                                                                                             : static_cast<std::size_t>(shaders::idFillPosVertexAttribute)))))))));
         const auto& attr = attrs->get(positionAttributeId) ? attrs->get(positionAttributeId)
                                                            : attrs->get(fallbackPositionAttributeId);
         if (attr && attr->getSharedRawData() && (attr->getSharedType() == gfx::AttributeDataType::Short2 ||
@@ -3038,6 +3179,7 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
         if (symbolIconDrawable) return symbolIconMeshSpecification();
         if (symbolTextAndIconDrawable) return symbolTextAndIconMeshSpecification();
         if (symbolSDFDrawable) return symbolSDFMeshSpecification();
+        if (collisionCircleDrawable) return collisionCircleMeshSpecification();
         if (heatmapTextureDrawable) return heatmapTextureMeshSpecification();
         if (heatmapDrawable) return heatmapMeshSpecification();
         if (hillshadePrepareDrawable) return hillshadePrepareMeshSpecification();
@@ -3091,10 +3233,61 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
     Float4Reader symbolHaloColorReader;
     Float2Reader symbolHaloWidthReader;
     Float2Reader symbolHaloBlurReader;
+    VertexReader collisionAnchorPosReader;
+    VertexReader collisionExtrudeReader;
+    UShort2Reader collisionPlacedReader;
+    Float2Reader collisionShiftReader;
     VertexReader rasterTexturePosReader;
     UShort4Reader fillPatternFromReader;
     UShort4Reader fillPatternToReader;
-    if (symbolIconDrawable || symbolSDFDrawable || symbolTextAndIconDrawable) {
+    if (collisionBoxDrawable || collisionCircleDrawable) {
+        if (const auto& attrs = getVertexAttributes()) {
+            const auto initShort2Reader = [](const gfx::VertexAttribute& attr, VertexReader& reader) {
+                if (attr.getSharedRawData() && attr.getSharedType() == gfx::AttributeDataType::Short2) {
+                    const auto offset = attr.getSharedOffset() + attr.getSharedVertexOffset() * attr.getSharedStride();
+                    reader.data = static_cast<const std::uint8_t*>(attr.getSharedRawData()->getRawData()) + offset;
+                    reader.stride = attr.getSharedStride();
+                    reader.count = attr.getSharedRawData()->getRawCount() - attr.getSharedVertexOffset();
+                } else if (attr.getDataType() == gfx::AttributeDataType::Short2 && !attr.getRawData().empty()) {
+                    reader.data = attr.getRawData().data();
+                    reader.stride = sizeof(std::int16_t) * 2;
+                    reader.count = attr.getRawData().size() / reader.stride;
+                }
+            };
+            const auto initUShort2Reader = [](const gfx::VertexAttribute& attr, UShort2Reader& reader) {
+                if (attr.getSharedRawData() && attr.getSharedType() == gfx::AttributeDataType::UShort2) {
+                    const auto offset = attr.getSharedOffset() + attr.getSharedVertexOffset() * attr.getSharedStride();
+                    reader.data = static_cast<const std::uint8_t*>(attr.getSharedRawData()->getRawData()) + offset;
+                    reader.stride = attr.getSharedStride();
+                    reader.count = attr.getSharedRawData()->getRawCount() - attr.getSharedVertexOffset();
+                } else if (attr.getDataType() == gfx::AttributeDataType::UShort2 && !attr.getRawData().empty()) {
+                    reader.data = attr.getRawData().data();
+                    reader.stride = sizeof(std::uint16_t) * 2;
+                    reader.count = attr.getRawData().size() / reader.stride;
+                }
+            };
+            const auto initFloat2Reader = [](const gfx::VertexAttribute& attr, Float2Reader& reader) {
+                reader.attribute = &attr;
+                if (attr.getSharedRawData() && attr.getSharedType() == gfx::AttributeDataType::Float2) {
+                    const auto offset = attr.getSharedOffset() + attr.getSharedVertexOffset() * attr.getSharedStride();
+                    reader.data = static_cast<const std::uint8_t*>(attr.getSharedRawData()->getRawData()) + offset;
+                    reader.stride = attr.getSharedStride();
+                    reader.count = attr.getSharedRawData()->getRawCount() - attr.getSharedVertexOffset();
+                } else if (attr.getDataType() == gfx::AttributeDataType::Float2 && !attr.getRawData().empty()) {
+                    reader.data = attr.getRawData().data();
+                    reader.stride = sizeof(float) * 2;
+                    reader.count = attr.getRawData().size() / reader.stride;
+                }
+            };
+            if (const auto& attr = attrs->get(shaders::idCollisionAnchorPosVertexAttribute)) initShort2Reader(*attr, collisionAnchorPosReader);
+            if (const auto& attr = attrs->get(shaders::idCollisionExtrudeVertexAttribute)) initShort2Reader(*attr, collisionExtrudeReader);
+            if (const auto& attr = attrs->get(shaders::idCollisionPlacedVertexAttribute)) initUShort2Reader(*attr, collisionPlacedReader);
+            if (const auto& attr = attrs->get(shaders::idCollisionShiftVertexAttribute)) initFloat2Reader(*attr, collisionShiftReader);
+        }
+        if (!collisionAnchorPosReader.data || !collisionExtrudeReader.data || !collisionPlacedReader.data) {
+            return;
+        }
+    } else if (symbolIconDrawable || symbolSDFDrawable || symbolTextAndIconDrawable) {
         if (const auto& attrs = getVertexAttributes()) {
             const auto initShort4Reader = [](const gfx::VertexAttribute& attr, Short4Reader& reader) {
                 if (attr.getSharedRawData() && attr.getSharedType() == gfx::AttributeDataType::Short4) {
@@ -3443,7 +3636,28 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
         if (!vertexReader.read(static_cast<std::uint16_t>(i), meshVertices[i].position[0], meshVertices[i].position[1])) {
             return;
         }
-        if (symbolIconDrawable || symbolSDFDrawable || symbolTextAndIconDrawable) {
+        if (collisionBoxDrawable || collisionCircleDrawable) {
+            float anchorX = 0.0f;
+            float anchorY = 0.0f;
+            float extrudeX = 0.0f;
+            float extrudeY = 0.0f;
+            std::array<float, 2> placed;
+            std::array<float, 2> shift = {0.0f, 0.0f};
+            if (!collisionAnchorPosReader.read(static_cast<std::uint16_t>(i), anchorX, anchorY) ||
+                !collisionExtrudeReader.read(static_cast<std::uint16_t>(i), extrudeX, extrudeY) ||
+                !collisionPlacedReader.read(static_cast<std::uint16_t>(i), placed)) {
+                return;
+            }
+            collisionShiftReader.read(static_cast<std::uint16_t>(i), shift);
+            meshVertices[i].collisionAnchorPos[0] = anchorX;
+            meshVertices[i].collisionAnchorPos[1] = anchorY;
+            meshVertices[i].collisionExtrude[0] = extrudeX;
+            meshVertices[i].collisionExtrude[1] = extrudeY;
+            meshVertices[i].collisionPlaced[0] = placed[0];
+            meshVertices[i].collisionPlaced[1] = placed[1];
+            meshVertices[i].collisionShift[0] = shift[0];
+            meshVertices[i].collisionShift[1] = shift[1];
+        } else if (symbolIconDrawable || symbolSDFDrawable || symbolTextAndIconDrawable) {
             std::array<std::int16_t, 4> posOffset;
             std::array<float, 4> data;
             std::array<std::int16_t, 4> pixelOffset{};
@@ -3858,6 +4072,46 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
         return;
     }
 
+    if (collisionBoxDrawable) {
+        SkPaint linePaint;
+        linePaint.setAntiAlias(true);
+        linePaint.setStyle(SkPaint::kStroke_Style);
+        for (const auto& segment : segments) {
+            if (!segment || segment->getMode().type != gfx::DrawModeType::Lines) {
+                continue;
+            }
+            linePaint.setStrokeWidth(std::max(1.0f, segment->getMode().size));
+            const auto& seg = segment->getSegment();
+            const auto end = std::min(seg.indexOffset + seg.indexLength, indexes.size());
+            for (std::size_t index = seg.indexOffset; index + 1 < end; index += 2) {
+                const auto i0 = indexes[index];
+                const auto i1 = indexes[index + 1];
+                if (i0 >= meshVertices.size() || i1 >= meshVertices.size()) {
+                    continue;
+                }
+                const auto placed = meshVertices[i0].collisionPlaced[0] > 0.5f;
+                const auto notUsed = meshVertices[i0].collisionPlaced[1] > 0.5f;
+                auto boxColor = placed ? SkColor4f{0.0f, 0.0f, 1.0f, 0.25f} : SkColor4f{1.0f, 0.0f, 0.0f, 0.5f};
+                if (notUsed) {
+                    boxColor.fA *= 0.1f;
+                }
+                linePaint.setColor4f(boxColor);
+                const auto p0 = collisionPointToScreen(matrix,
+                                                       viewport,
+                                                       parameters.state.getCameraToCenterDistance(),
+                                                       collisionExtrudeScale,
+                                                       meshVertices[i0]);
+                const auto p1 = collisionPointToScreen(matrix,
+                                                       viewport,
+                                                       parameters.state.getCameraToCenterDistance(),
+                                                       collisionExtrudeScale,
+                                                       meshVertices[i1]);
+                canvas->drawLine(p0[0], p0[1], p1[0], p1[1], linePaint);
+            }
+        }
+        return;
+    }
+
     auto* directContext = static_cast<RendererBackend&>(parameters.backend).getDirectContext();
     const auto vertexBuffer = SkMeshes::MakeVertexBuffer(directContext,
                                                          meshVertices.data(),
@@ -3917,6 +4171,11 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
         writeUniform(uniforms, *specification, "u_device_pixel_ratio", &devicePixelRatio, sizeof(devicePixelRatio));
         writeUniform(uniforms, *specification, "u_is_halo", &symbolIsHalo, sizeof(symbolIsHalo));
         writeUniform(uniforms, *specification, "u_gamma_scale", &symbolGammaScale, sizeof(symbolGammaScale));
+    } else if (collisionCircleDrawable) {
+        const float cameraToCenterDistance = parameters.state.getCameraToCenterDistance();
+        writeUniform(uniforms, *specification, "u_extrude_scale", collisionExtrudeScale.data(), collisionExtrudeScale.size() * sizeof(float));
+        writeUniform(uniforms, *specification, "u_camera_to_center_distance", &cameraToCenterDistance, sizeof(cameraToCenterDistance));
+        writeUniform(uniforms, *specification, "u_overscale_factor", &collisionOverscaleFactor, sizeof(collisionOverscaleFactor));
     } else if (circleDrawable) {
         const float cameraToCenterDistance = parameters.state.getCameraToCenterDistance();
         writeUniform(uniforms, *specification, "u_extrude_scale", circleExtrudeScale.data(), circleExtrudeScale.size() * sizeof(float));
