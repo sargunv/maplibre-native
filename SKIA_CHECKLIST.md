@@ -166,7 +166,7 @@
 - [x] Audit memory ownership and GPU resource cleanup. Fixed offscreen texture snapshot lifetime by retaining source `SkSurface`s with `sk_sp`, documented RAII ownership, and verified `SkiaResource.*` passes 7 tests.
 - [x] Audit thread-safety assumptions around Skia contexts and surfaces. Documented renderer-thread confinement for `GrDirectContext`, `SkSurface`, `SkCanvas`, textures, command encoders, and render/upload passes; immutable `SkMeshSpecification` statics are the only intentionally shared state.
 - [x] Document platform integration requirements. Current headless and GLFW paths use backend-owned renderables; production platform integrations need a Skia-compatible GPU context, current-frame surface/canvas, resize propagation, presentation after Skia flush, renderer-thread ownership, and surface lifetime guarantees.
-- [ ] Document backend limitations and known divergences.
+- [x] Document backend limitations and known divergences. Consolidated platform gaps, fixed-function/depth-stencil differences, texture/debug/memory cleanup limitations, and current render-test parity clusters in `SKIA_RESEARCH.md`.
 - [ ] Remove placeholder no-op rendering once SkMesh path is active.
 - [ ] Remove temporary Skia smoke targets once render-test coverage is sufficient.
 - [ ] Remove temporary scaffold comments and dead code.

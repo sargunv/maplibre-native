@@ -288,6 +288,26 @@ Local result from 2026-05-02:
 
 The only Skia failure in this subset is `image/pitched`. Raster-heavy timing is close to Metal for local Debug builds, and the pass rate indicates the raster shader path is not a major parity risk compared with symbol/text and tile LOD work.
 
+## Backend Limitations And Known Divergences
+
+The Skia backend remains experimental. It is useful for render-test development, profiling, and platform integration experiments, but it is not ready to replace the established Metal/OpenGL/Vulkan backends.
+
+Current platform limitations:
+
+- Apple Metal is the only implemented GPU context path.
+- Linux/Android Vulkan and fallback GL Ganesh contexts are not implemented.
+- The GLFW integration renders through a backend-owned offscreen surface instead of presenting into the native window surface.
+- Raster surfaces remain a fallback when GPU context creation is unavailable.
+
+Current rendering limitations:
+
+- Depth, stencil, and cull state are degraded for Skia. Tile clipping uses the canvas clip stack, and fill extrusion does not provide full fixed-function depth semantics.
+- Texture storage still uses CPU image snapshots in several upload paths instead of always using GPU texture-backed image objects.
+- Debug groups are rendering-safe no-ops until Skia tracing or platform signposts are added.
+- `Context::reduceMemoryUsage()` does not purge Skia/Ganesh caches yet.
+
+Current parity gaps are concentrated in line gradients and pitched line patterns, full line and circle suites, symbol text/icon edge cases, collision debug placement offsets, heatmap radius/weight combinations, color-relief/hillshade sandwich cases, fill extrusion negative base, tile LOD behavior, CJK/vertical text, and pitched image placement.
+
 ## Fixed-Function State
 
 The Skia backend maps MapLibre's fixed-function state only where Skia exposes an equivalent canvas or paint concept.
