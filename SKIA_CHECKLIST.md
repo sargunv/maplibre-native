@@ -170,5 +170,5 @@
 - [x] Remove placeholder no-op rendering once SkMesh path is active. Audited remaining Skia no-op methods; active rendering now goes through `SkMesh` or explicit Skia helpers, and remaining empty hooks are documented backend-policy no-ops.
 - [x] Remove temporary Skia smoke targets once render-test coverage is sufficient. Deleted `mbgl-skia-smoke` and `mbgl-skia-map-smoke`; Skia validation now relies on render-test smoke coverage, targeted resource tests, and the GLFW sample build.
 - [x] Remove temporary scaffold comments and dead code. Audited Skia source/header files after smoke target removal; no temporary scaffold comments or dead Skia stubs remain.
-- [ ] Reach parity target for initial 2D layer set.
+- [ ] Reach parity target for initial 2D layer set. Target: every render test is either already ignored on main, passing with Skia, or failing with a narrowly documented deferral reason. Fill extrusion depth-buffer semantics are the expected acceptable deferral class; other failures are fix-required unless a similarly strong blocker is identified. Full-suite Skia baseline on 2026-05-02: 1177 passed, 7 ignored passed, 76 ignored, and 142 failed.
 - [ ] Decide whether to graduate backend from experimental.

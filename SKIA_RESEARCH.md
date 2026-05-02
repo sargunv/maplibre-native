@@ -306,7 +306,9 @@ Current rendering limitations:
 - Debug groups are rendering-safe no-ops until Skia tracing or platform signposts are added.
 - `Context::reduceMemoryUsage()` does not purge Skia/Ganesh caches yet.
 
-Current parity gaps are concentrated in line gradients and pitched line patterns, full line and circle suites, symbol text/icon edge cases, collision debug placement offsets, heatmap radius/weight combinations, color-relief/hillshade sandwich cases, fill extrusion negative base, tile LOD behavior, CJK/vertical text, and pitched image placement.
+Initial 2D parity target: every render test must be in one of three states before the backend can graduate from experimental: already ignored on main before the Skia branch, passing with Skia, or failing with a narrowly documented deferral reason. Expected deferrals should be exceptional; fill extrusion cases that require fixed-function depth-buffer semantics are the known acceptable class. Other failures should be treated as fix-required unless a similarly strong blocker is identified.
+
+Current full-suite baseline from 2026-05-02: 1177 passed, 7 ignored passed, 76 ignored, and 142 failed. Ten failures are in fill-extrusion families and may qualify for depth-semantics deferral after case-by-case review. The remaining failures are fix-required under the parity target.
 
 ## Placeholder Rendering Cleanup
 
