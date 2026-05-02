@@ -2681,7 +2681,7 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
                 symbolOpacity = props->icon_opacity;
             }
         }
-    } else if (symbolImageTexture || symbolImageIconTexture) {
+    } else if (!hasLinePositionAttribute && (symbolImageTexture || symbolImageIconTexture)) {
         const shaders::SymbolDrawableUBO* drawableUBO = nullptr;
         const shaders::SymbolTilePropsUBO* tilePropsUBO = nullptr;
 #if MLN_UBO_CONSOLIDATION
@@ -2802,7 +2802,7 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
                 hillshadeHighlights = props->highlights;
             }
         }
-    } else if (colorReliefImageTexture) {
+    } else if (!hasLinePositionAttribute && colorReliefImageTexture) {
         const shaders::ColorReliefDrawableUBO* drawableUBO = nullptr;
         const shaders::ColorReliefTilePropsUBO* tilePropsUBO = nullptr;
 #if MLN_UBO_CONSOLIDATION
