@@ -1,3 +1,5 @@
+> Archived 2026-05-02 after focused and full sweeps passed with solid-fill near-plane clipping and tile-clip near-plane guard.
+
 # render-tests/regressions/mapbox-gl-js#3320
 
 - Status: active

@@ -26,6 +26,10 @@ std::array<float, 2> projectToScreen(const mat4& matrix, const float viewport[2]
     return {static_cast<float>((ndcX * 0.5 + 0.5) * viewport[0]), static_cast<float>((0.5 - ndcY * 0.5) * viewport[1])};
 }
 
+float projectedW(const mat4& matrix, const float x, const float y) {
+    return static_cast<float>(matrix[3] * x + matrix[7] * y + matrix[15]);
+}
+
 bool isFinite(const std::array<float, 2>& point) {
     return std::isfinite(point[0]) && std::isfinite(point[1]);
 }
@@ -38,6 +42,13 @@ std::optional<SkPath> tileClipPath(const mat4& matrix, const Size size) {
     const auto bottomRight = projectToScreen(
         matrix, viewport, static_cast<float>(util::EXTENT), static_cast<float>(util::EXTENT));
     const auto bottomLeft = projectToScreen(matrix, viewport, 0.0f, static_cast<float>(util::EXTENT));
+    constexpr float projectedNearW = 1.0e-4f;
+    if (projectedW(matrix, 0.0f, 0.0f) < projectedNearW ||
+        projectedW(matrix, static_cast<float>(util::EXTENT), 0.0f) < projectedNearW ||
+        projectedW(matrix, static_cast<float>(util::EXTENT), static_cast<float>(util::EXTENT)) < projectedNearW ||
+        projectedW(matrix, 0.0f, static_cast<float>(util::EXTENT)) < projectedNearW) {
+        return std::nullopt;
+    }
     if (!isFinite(topLeft) || !isFinite(topRight) || !isFinite(bottomRight) || !isFinite(bottomLeft)) {
         return std::nullopt;
     }

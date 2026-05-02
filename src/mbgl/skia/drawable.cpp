@@ -2729,6 +2729,7 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
     float rasterContrastFactor = 1.0f;
     bool fillPatternDrawable = false;
     bool fillOutlinePatternDrawable = false;
+    bool solidFillDrawable = false;
     std::array<float, 2> fillPatternPixelCoordUpper = {0.0f, 0.0f};
     std::array<float, 2> fillPatternPixelCoordLower = {0.0f, 0.0f};
     std::array<float, 4> fillPatternFrom = {0.0f, 0.0f, 0.0f, 0.0f};
@@ -3424,7 +3425,8 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
             }
         }
     } else if (const auto* drawableUBO = getUBO<shaders::FillDrawableUBO>(&getUniformBuffers(),
-                                                                          shaders::idFillDrawableUBO)) {
+                                                                           shaders::idFillDrawableUBO)) {
+        solidFillDrawable = true;
         matrix = drawableUBO->matrix;
         colorT = drawableUBO->color_t;
         opacityT = drawableUBO->opacity_t;
@@ -4415,7 +4417,7 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
     std::vector<std::uint16_t> clippedIndexes;
     const auto* drawIndexes = &sharedIndexes->vector();
     bool clippedProjected = false;
-    if (rasterDrawable && needsProjectedClipping(meshVertices, *drawIndexes, matrix)) {
+    if ((rasterDrawable || solidFillDrawable) && needsProjectedClipping(meshVertices, *drawIndexes, matrix)) {
         clippedIndexes = *drawIndexes;
         if (clipProjectedTriangles(meshVertices, clippedIndexes, matrix)) {
             drawIndexes = &clippedIndexes;

@@ -1,3 +1,5 @@
+> Archived 2026-05-02 after the full Skia sweep passed with near-plane tile clipping fixes.
+
 # render-tests/fill-extrusion-translate-anchor/viewport
 
 - Status: active
