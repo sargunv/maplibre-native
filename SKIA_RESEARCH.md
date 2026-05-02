@@ -192,6 +192,33 @@ canvas.restore();
 
 This is a deliberate replacement for stencil-based clipping, not a missing backend feature. It should be adequate for 2D map content and keeps the implementation on public Skia APIs. It may have different performance characteristics than stencil clipping, so render tests and profiling should compare tile-heavy styles.
 
+## Tile-Heavy Profiling
+
+Tile-heavy profiling currently uses the render-test runner against local macOS Debug builds. The comparison is a smoke-level backend check, not a production benchmark, because both presets use `CMAKE_BUILD_TYPE=Debug` and the Skia run still has known tile LOD rendering failures.
+
+The measured subset is:
+
+- `render-tests/tile-lod/*`
+- `render-tests/tile-mode/streets-v11`
+- `render-tests/sparse-tileset/overdraw`
+- `render-tests/real-world/*`
+
+Local command pattern:
+
+```sh
+/usr/bin/time -p build-macos-skia/mbgl-render-test-runner --manifestPath metrics/macos-skia.json --filter 'render-tests/(tile-lod/|tile-mode/streets-v11|sparse-tileset/overdraw|real-world/)'
+/usr/bin/time -p build-macos-metal/mbgl-render-test-runner --manifestPath metrics/macos-xcode11-release-style.json --filter 'render-tests/(tile-lod/|tile-mode/streets-v11|sparse-tileset/overdraw|real-world/)'
+```
+
+Local result from 2026-05-02:
+
+| Backend | Result | Wall time |
+| --- | --- | --- |
+| Skia | 3 passed, 4 ignored, 9 failed | 3.05s |
+| Metal | 12 passed, 4 ignored | 2.64s |
+
+The Skia failures are concentrated in `tile-lod/*` plus `real-world/nepal`. This closes the initial tile-heavy profiling milestone while leaving tile LOD parity and performance as follow-up work. The run confirms the Skia backend can execute the tile-heavy suite locally without crashes or resource lifetime failures.
+
 ## Fixed-Function State
 
 The Skia backend maps MapLibre's fixed-function state only where Skia exposes an equivalent canvas or paint concept.

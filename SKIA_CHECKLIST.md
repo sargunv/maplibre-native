@@ -160,7 +160,7 @@
 - [x] Add targeted unit tests for vertex attribute packing.
 - [x] Add targeted unit tests for uniform buffer packing.
 - [x] Add targeted unit tests for tile clipping behavior.
-- [ ] Profile tile-heavy styles against existing backends.
+- [x] Profile tile-heavy styles against existing backends. Local macOS Debug render-test timing on 2026-05-02: Skia 3.05s with 3 passed, 4 ignored, and 9 failed; Metal 2.64s with 12 passed and 4 ignored. Skia failures are concentrated in `tile-lod/*` plus `real-world/nepal`, so follow-up remains a tile LOD parity/performance task.
 - [ ] Profile text-heavy styles against existing backends.
 - [ ] Profile raster-heavy styles against existing backends.
 - [ ] Audit memory ownership and GPU resource cleanup.
