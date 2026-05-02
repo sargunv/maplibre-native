@@ -1,6 +1,6 @@
 # Skia Rendering Backend Checklist
 
-Status: Skia builds; clipping/blend, core fill/circle/raster, stretchable icons, line gradient/blur/offset, fill-extrusion base/height/pattern, and core heatmap paths are validated, with broader parity still in progress.
+Status: Skia builds; clipping/blend, core fill/circle/raster, stretchable icons, line gradient/blur/offset, fill-extrusion base/height/pattern, core heatmap paths, and collision debug geometry are validated, with broader parity still in progress.
 
 - [x] Define Skia backend project scope and architecture in `SKIA_RESEARCH.md`.
 - [x] Add `MLN_WITH_SKIA` build option.
@@ -135,7 +135,7 @@ Status: Skia builds; clipping/blend, core fill/circle/raster, stretchable icons,
 - [ ] Pass symbol icon render tests. Stretchable icon/content cases pass; broader icon parity remains in progress.
 - [ ] Pass symbol text render tests.
 - [x] Implement collision debug drawing.
-- [ ] Pass collision debug render tests.
+- [ ] Pass collision debug render tests. Focused collision sweep is 3/9 passing with 1 upstream ignored; remaining failures have visible debug geometry but differ in text-path placement or small collision-box offsets.
 - [x] Port heatmap accumulation pass.
 - [x] Port heatmap colorization pass.
 - [ ] Pass heatmap render tests. Core color/intensity/opacity cases pass; remaining radius/weight failures are small diffs, and combination parity still needs follow-up.
