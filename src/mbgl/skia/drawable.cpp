@@ -536,7 +536,8 @@ sk_sp<SkMeshSpecification> solidColorMeshSpecification() {
 
     const SkString fragmentShader(R"(
         float2 main(const Varyings varyings, out half4 color) {
-            color = half4(varyings.color);
+            float alpha = varyings.color.a;
+            color = half4(alpha > 0.0 ? float4(varyings.color.rgb / alpha, alpha) : varyings.color);
             return varyings.position;
         }
     )");
