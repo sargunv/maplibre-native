@@ -129,9 +129,7 @@ jobs:
             mbgl-core \
             mbgl-glfw \
             mbgl-test-runner \
-            mbgl-render-test-runner \
-            mbgl-skia-smoke \
-            mbgl-skia-map-smoke
+            mbgl-render-test-runner
 
       - name: Run Skia resource tests
         run: build-macos-skia/mbgl-test-runner '--gtest_filter=SkiaResource.*'
