@@ -1,6 +1,6 @@
 # Skia Rendering Backend Checklist
 
-Status: Skia builds; clipping/blend, core fill/circle/raster, stretchable icons, line gradient/blur/offset, and core heatmap color/intensity/opacity paths are validated, with broader parity still in progress.
+Status: Skia builds; clipping/blend, core fill/circle/raster, stretchable icons, line gradient/blur/offset, fill-extrusion base/height/pattern, and core heatmap paths are validated, with broader parity still in progress.
 
 - [x] Define Skia backend project scope and architecture in `SKIA_RESEARCH.md`.
 - [x] Add `MLN_WITH_SKIA` build option.
@@ -149,7 +149,7 @@ Status: Skia builds; clipping/blend, core fill/circle/raster, stretchable icons,
 - [x] Port fill extrusion solid shader/render path.
 - [x] Pass basic fill extrusion color render tests.
 - [x] Pass fill extrusion height render tests.
-- [ ] Pass fill extrusion base render tests.
+- [ ] Pass fill extrusion base render tests. Active literal/default/function cases pass; negative-base remains a small diff and two data-driven cases are ignored upstream.
 - [x] Implement fill extrusion pattern shader/render path.
 - [x] Pass active fill extrusion pattern render tests.
 - [ ] Document unsupported fill extrusion behavior if deferred.
