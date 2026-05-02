@@ -63,9 +63,9 @@
 - [x] Implement offscreen texture as a GPU-backed `SkSurface` where available.
 - [x] Create offscreen textures as GPU-backed `SkSurface`s when a GPU context is available.
 - [ ] Remove or hard-gate raster offscreen texture path once GPU offscreen surfaces are available.
-- [ ] Define Skia uniform byte layout and ownership model.
-- [ ] Implement uniform buffer copying into Skia mesh uniform data.
-- [ ] Implement global uniform buffer binding policy for Skia drawables.
+- [x] Define Skia uniform byte layout and ownership model.
+- [x] Implement uniform buffer copying into Skia mesh uniform data.
+- [x] Implement global uniform buffer binding policy for Skia drawables.
 - [x] Define initial Skia vertex attribute packing rules for solid triangle meshes.
 - [ ] Implement MapLibre attribute type to Skia mesh attribute type mapping.
 - [x] Implement initial CPU staging for shared and raw `Short2` position attributes.

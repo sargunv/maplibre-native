@@ -158,6 +158,14 @@ Textures should be passed as child `SkShader`s, usually produced from `SkImage::
 
 Uniform buffers can remain raw bytes at the MapLibre boundary. The Skia backend can copy those bytes into the uniform data expected by each `SkMeshSpecification` or runtime effect. The existing UBO headers in `include/mbgl/shaders/*_ubo.hpp` are useful because they already define the packed data that layer tweakers produce.
 
+## Uniform Buffer Policy
+
+`skia::UniformBuffer` owns a byte copy of the MapLibre UBO payload. Drawables read typed UBO structs from those bytes and write the fields needed by the selected `SkMeshSpecification` into Skia uniform data immediately before drawing.
+
+Layer tweakers may provide consolidated per-layer UBO arrays. Skia drawables use their UBO index to read the matching entry from the layer uniform array, falling back to drawable-local UBOs where the shared renderer still writes them directly.
+
+Global uniform buffers are not bound as backend state in the Skia path. Current SkSL mesh programs consume per-drawable and per-layer values directly, so `Context::bindGlobalUniformBuffers()` and `unbindGlobalUniformBuffers()` are no-ops until a shader path needs shared global state.
+
 ## Render Passes And Targets
 
 MapLibre render targets map naturally to offscreen `SkSurface`s:
