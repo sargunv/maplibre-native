@@ -128,9 +128,13 @@ jobs:
           cmake --build build-macos-skia --target \
             mbgl-core \
             mbgl-glfw \
+            mbgl-test-runner \
             mbgl-render-test-runner \
             mbgl-skia-smoke \
             mbgl-skia-map-smoke
+
+      - name: Run Skia resource tests
+        run: build-macos-skia/mbgl-test-runner '--gtest_filter=SkiaResource.*'
 
       - name: Prepare Skia render test output directory
         run: mkdir -p metrics/macos-skia

@@ -163,6 +163,14 @@ if(MLN_WITH_VULKAN)
     )
 endif()
 
+if(MLN_WITH_SKIA)
+    target_sources(
+        mbgl-test
+        PRIVATE
+            ${PROJECT_SOURCE_DIR}/test/skia/resources.test.cpp
+    )
+endif()
+
 if(CMAKE_SYSTEM_NAME STREQUAL Android)
     message("Target platform does not support HTTP tests or dependencies not found.")
 
