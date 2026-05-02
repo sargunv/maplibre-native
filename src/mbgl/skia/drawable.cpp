@@ -1,5 +1,6 @@
 #include "skia_impl.hpp"
 
+#include <mbgl/gfx/color_mode.hpp>
 #include <mbgl/gfx/hillshade_prepare_drawable_data.hpp>
 #include <mbgl/renderer/paint_parameters.hpp>
 #include <mbgl/skia/renderer_backend.hpp>
@@ -40,6 +41,7 @@
 #include <cstring>
 #include <limits>
 #include <string>
+#include <type_traits>
 #include <variant>
 #include <vector>
 
@@ -2346,6 +2348,66 @@ void writeUniform(sk_sp<SkData>& uniforms,
     std::memcpy(static_cast<std::uint8_t*>(uniforms->writable_data()) + uniform->offset, data, size);
 }
 
+bool hasColorWrites(const gfx::ColorMode& colorMode) {
+    return colorMode.mask.r || colorMode.mask.g || colorMode.mask.b || colorMode.mask.a;
+}
+
+SkBlendMode blendModeFor(const gfx::ColorMode& colorMode) {
+    auto blendMode = SkBlendMode::kSrc;
+    colorMode.blendFunction.match([&](const auto& blendFunction) {
+        using BlendFunction = std::decay_t<decltype(blendFunction)>;
+        if constexpr (std::is_same_v<BlendFunction, gfx::ColorMode::Replace>) {
+            blendMode = SkBlendMode::kSrc;
+        } else {
+            const auto equation = gfx::ColorBlendEquationType(blendFunction.equation);
+            const auto src = gfx::ColorBlendFactorType(blendFunction.srcFactor);
+            const auto dst = gfx::ColorBlendFactorType(blendFunction.dstFactor);
+
+            if (equation != gfx::ColorBlendEquationType::Add) {
+                blendMode = SkBlendMode::kSrcOver;
+            } else if (src == gfx::ColorBlendFactorType::Zero && dst == gfx::ColorBlendFactorType::Zero) {
+                blendMode = SkBlendMode::kClear;
+            } else if (src == gfx::ColorBlendFactorType::One && dst == gfx::ColorBlendFactorType::Zero) {
+                blendMode = SkBlendMode::kSrc;
+            } else if (src == gfx::ColorBlendFactorType::Zero && dst == gfx::ColorBlendFactorType::One) {
+                blendMode = SkBlendMode::kDst;
+            } else if (src == gfx::ColorBlendFactorType::One && dst == gfx::ColorBlendFactorType::OneMinusSrcAlpha) {
+                blendMode = SkBlendMode::kSrcOver;
+            } else if (src == gfx::ColorBlendFactorType::OneMinusDstAlpha && dst == gfx::ColorBlendFactorType::One) {
+                blendMode = SkBlendMode::kDstOver;
+            } else if (src == gfx::ColorBlendFactorType::DstAlpha && dst == gfx::ColorBlendFactorType::Zero) {
+                blendMode = SkBlendMode::kSrcIn;
+            } else if (src == gfx::ColorBlendFactorType::Zero && dst == gfx::ColorBlendFactorType::SrcAlpha) {
+                blendMode = SkBlendMode::kDstIn;
+            } else if (src == gfx::ColorBlendFactorType::OneMinusDstAlpha && dst == gfx::ColorBlendFactorType::Zero) {
+                blendMode = SkBlendMode::kSrcOut;
+            } else if (src == gfx::ColorBlendFactorType::Zero && dst == gfx::ColorBlendFactorType::OneMinusSrcAlpha) {
+                blendMode = SkBlendMode::kDstOut;
+            } else if (src == gfx::ColorBlendFactorType::DstAlpha && dst == gfx::ColorBlendFactorType::OneMinusSrcAlpha) {
+                blendMode = SkBlendMode::kSrcATop;
+            } else if (src == gfx::ColorBlendFactorType::OneMinusDstAlpha && dst == gfx::ColorBlendFactorType::SrcAlpha) {
+                blendMode = SkBlendMode::kDstATop;
+            } else if (src == gfx::ColorBlendFactorType::OneMinusDstAlpha && dst == gfx::ColorBlendFactorType::OneMinusSrcAlpha) {
+                blendMode = SkBlendMode::kXor;
+            } else if (src == gfx::ColorBlendFactorType::One && dst == gfx::ColorBlendFactorType::One) {
+                blendMode = SkBlendMode::kPlus;
+            } else if ((src == gfx::ColorBlendFactorType::DstColor && dst == gfx::ColorBlendFactorType::Zero) ||
+                       (src == gfx::ColorBlendFactorType::Zero && dst == gfx::ColorBlendFactorType::SrcColor)) {
+                blendMode = SkBlendMode::kModulate;
+            } else if ((src == gfx::ColorBlendFactorType::OneMinusDstColor && dst == gfx::ColorBlendFactorType::One) ||
+                       (src == gfx::ColorBlendFactorType::One && dst == gfx::ColorBlendFactorType::OneMinusSrcColor)) {
+                blendMode = SkBlendMode::kScreen;
+            } else if ((src == gfx::ColorBlendFactorType::ConstantColor && dst == gfx::ColorBlendFactorType::One) ||
+                       (src == gfx::ColorBlendFactorType::ConstantAlpha && dst == gfx::ColorBlendFactorType::One)) {
+                blendMode = SkBlendMode::kPlus;
+            } else {
+                blendMode = SkBlendMode::kSrcOver;
+            }
+        }
+    });
+    return blendMode;
+}
+
 std::array<float, 2> projectToScreen(const std::array<float, 16>& matrix,
                                      const float viewport[2],
                                      const float x,
@@ -2398,6 +2460,11 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
     auto* renderPass = static_cast<RenderPass*>(parameters.renderPass.get());
     auto* canvas = renderPass->getCanvas();
     if (!canvas) {
+        return;
+    }
+
+    const auto& colorMode = getColorMode();
+    if (!hasColorWrites(colorMode)) {
         return;
     }
 
@@ -4603,9 +4670,7 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
 
     SkPaint paint;
     paint.setAntiAlias(true);
-    if (heatmapDrawable) {
-        paint.setBlendMode(SkBlendMode::kPlus);
-    }
+    paint.setBlendMode(blendModeFor(colorMode));
 
     for (const auto& segment : segments) {
         if (!segment || segment->getMode().type != gfx::DrawModeType::Triangles) {

@@ -1,5 +1,7 @@
 # Skia Rendering Backend Checklist
 
+Status: Skia builds and focused clipping/blend smoke tests pass; broader render-test parity is still in progress.
+
 - [x] Define Skia backend project scope and architecture in `SKIA_RESEARCH.md`.
 - [x] Add `MLN_WITH_SKIA` build option.
 - [x] Add Skia to backend option validation.
@@ -83,7 +85,7 @@
 - [x] Verify MapLibre `Renderer` Skia smoke executable produces a non-black image artifact on macOS Metal.
 - [x] Implement drawable texture child shader binding.
 - [x] Implement initial drawable uniform binding for matrix, viewport, and solid color.
-- [ ] Implement blend state mapping from `gfx::ColorMode` to Skia paint/blend configuration.
+- [x] Implement blend state mapping from `gfx::ColorMode` to Skia paint/blend configuration.
 - [ ] Implement cull-face support or document no-op behavior for 2D layers.
 - [ ] Implement depth mode support or document no-op/degraded behavior for 2D layers.
 - [x] Implement tile clipping with Skia canvas clip stack.
