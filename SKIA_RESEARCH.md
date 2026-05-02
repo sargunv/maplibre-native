@@ -185,6 +185,14 @@ Offscreen-derived textures retain their source `SkSurface` with `sk_sp<SkSurface
 
 Buffer and uniform resources own byte copies in `std::vector<std::uint8_t>`, so drawable resource lifetime does not depend on caller-owned staging memory. Skia GPU resources are released by dropping `sk_sp` and `std::unique_ptr` owners; `Context::reduceMemoryUsage()` is still a no-op and can later call Ganesh cache-purge APIs once the backend has a clear memory-pressure policy.
 
+## Thread-Safety Policy
+
+Skia backend rendering objects are renderer-thread confined. `RendererBackend`, `Context`, `RenderableResource`, `Texture2D`, `OffscreenTexture`, command encoders, render passes, and upload passes should be created, mutated, and destroyed on the renderer thread that owns the backend. The backend does not add mutexes around `GrDirectContext`, `SkSurface`, `SkCanvas`, texture snapshots, or CPU staging buffers.
+
+Platform integrations should treat host-provided Skia surfaces the same way: the surface and its Ganesh context must be used from the thread or queue expected by the host. Apple builds create one Metal command queue for the Ganesh context owned by `RendererBackend`; callers should not share that context across independent render threads.
+
+Function-local `SkMeshSpecification` caches in the drawable implementation are the only intentionally shared state. C++ initializes those statics in a thread-safe way, and the resulting specifications are immutable after creation. They must not store per-context GPU resources or mutable frame state.
+
 ## Tile Clipping
 
 Existing GPU backends use stencil for tile clipping. Public Skia canvas APIs do not expose GL-style stencil writes/tests as a portable rendering primitive. The Skia backend should implement tile clipping in `skia::TileLayerGroup::render()` using the canvas clip stack.

@@ -164,7 +164,7 @@
 - [x] Profile text-heavy styles against existing backends. Local macOS Debug render-test timing on 2026-05-02: Skia 2.12s with 17 passed and 9 failed; Metal 1.99s with 25 passed and 1 ignored passed. Skia failures are concentrated in line-label placement/spacing, line-placement text size, formatted line text, tile-map variable anchors, and CJK/vertical writing modes.
 - [x] Profile raster-heavy styles against existing backends. Local macOS Debug render-test timing on 2026-05-02: Skia 3.53s with 41 passed, 1 ignored, and 1 failed; Metal 3.19s with 42 passed and 1 ignored. The only Skia failure in this subset is `image/pitched`.
 - [x] Audit memory ownership and GPU resource cleanup. Fixed offscreen texture snapshot lifetime by retaining source `SkSurface`s with `sk_sp`, documented RAII ownership, and verified `SkiaResource.*` passes 7 tests.
-- [ ] Audit thread-safety assumptions around Skia contexts and surfaces.
+- [x] Audit thread-safety assumptions around Skia contexts and surfaces. Documented renderer-thread confinement for `GrDirectContext`, `SkSurface`, `SkCanvas`, textures, command encoders, and render/upload passes; immutable `SkMeshSpecification` statics are the only intentionally shared state.
 - [ ] Document platform integration requirements.
 - [ ] Document backend limitations and known divergences.
 - [ ] Remove placeholder no-op rendering once SkMesh path is active.
