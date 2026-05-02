@@ -50,7 +50,7 @@
 - [x] Implement Skia renderable resource binding around current frame surface/canvas.
 - [x] Implement `CommandEncoder::present` flush and submit behavior for Skia surfaces.
 - [x] Implement render pass canvas selection and clear color behavior.
-- [ ] Implement render pass depth/stencil clear handling or explicit no-op policy.
+- [x] Implement render pass depth/stencil clear handling or explicit no-op policy.
 - [ ] Implement upload pass texture upload path into GPU texture-backed image objects.
 - [x] Implement `Texture2D` image storage with `SkImage` snapshots.
 - [ ] Replace CPU image snapshots with GPU-backed `SkImage`/texture objects where renderable.
@@ -84,11 +84,11 @@
 - [x] Implement drawable texture child shader binding.
 - [x] Implement initial drawable uniform binding for matrix, viewport, and solid color.
 - [x] Implement blend state mapping from `gfx::ColorMode` to Skia paint/blend configuration.
-- [ ] Implement cull-face support or document no-op behavior for 2D layers.
-- [ ] Implement depth mode support or document no-op/degraded behavior for 2D layers.
+- [x] Implement cull-face support or document no-op behavior for 2D layers.
+- [x] Implement depth mode support or document no-op/degraded behavior for 2D layers.
 - [x] Implement tile clipping with Skia canvas clip stack.
 - [x] Replace stencil tile clipping with Skia clip path/rect behavior in `TileLayerGroup`.
-- [ ] Implement debug group/signpost behavior with Skia tracing where available.
+- [x] Implement debug group/signpost behavior with Skia tracing where available. Current policy documents debug groups as rendering-safe no-ops until Skia tracing/signposts are added.
 - [x] Add Skia shader program base type.
 - [x] Add Skia shader group type.
 - [x] Add Skia shader registration in `RendererBackend::initShaders`.

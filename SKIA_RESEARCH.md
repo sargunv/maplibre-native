@@ -170,6 +170,16 @@ canvas.restore();
 
 This is a deliberate replacement for stencil-based clipping, not a missing backend feature. It should be adequate for 2D map content and keeps the implementation on public Skia APIs. It may have different performance characteristics than stencil clipping, so render tests and profiling should compare tile-heavy styles.
 
+## Fixed-Function State
+
+The Skia backend maps MapLibre's fixed-function state only where Skia exposes an equivalent canvas or paint concept.
+
+Cull-face state is a no-op for the current 2D mesh path. MapLibre buckets already provide front-facing triangle order for the layers Skia renders, and Skia mesh drawing does not expose portable GPU-style face culling through `SkCanvas`.
+
+Depth and stencil state are intentionally degraded. Layer order, render passes, tile clips, and drawable order provide ordering for 2D content. Tile clipping uses the canvas clip stack instead of stencil. Render pass depth and stencil clears are therefore no-ops until a future Skia 3D path needs explicit depth semantics.
+
+Debug groups are currently no-ops. They are safe to add later using Skia tracing or platform signposts, but rendering correctness must not depend on them.
+
 ## Depth And 3D
 
 Most 2D ordering is already expressed through MapLibre's layer order, opaque/translucent passes, and drawable sort order. The Skia backend can handle that without a depth buffer.
