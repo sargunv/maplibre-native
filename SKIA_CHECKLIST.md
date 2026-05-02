@@ -157,7 +157,7 @@
 - [x] Add Skia backend CI configure/build job.
 - [x] Add Skia backend render-test job once output is meaningful. CI runs a focused background/fill/line/raster smoke subset while full-suite parity gaps remain tracked separately.
 - [x] Add targeted unit tests for texture upload and offscreen readback.
-- [ ] Add targeted unit tests for vertex attribute packing.
+- [x] Add targeted unit tests for vertex attribute packing.
 - [ ] Add targeted unit tests for uniform buffer packing.
 - [ ] Add targeted unit tests for tile clipping behavior.
 - [ ] Profile tile-heavy styles against existing backends.

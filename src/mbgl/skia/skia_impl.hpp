@@ -222,6 +222,7 @@ public:
     void setVertices(std::vector<std::uint8_t>&&, std::size_t, gfx::AttributeDataType) override;
     void setIndexData(gfx::IndexVectorBasePtr, std::vector<UniqueDrawSegment>) override;
     void setVertexAttrId(std::size_t id) { positionAttributeId = id; }
+    std::vector<gfx::VertexAttribute::float2> readPackedPositionsForTests() const;
     const gfx::UniformBufferArray& getUniformBuffers() const override;
     gfx::UniformBufferArray& mutableUniformBuffers() override;
 

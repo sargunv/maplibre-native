@@ -4811,6 +4811,37 @@ void Drawable::setVertices(std::vector<std::uint8_t>&& vertices_, std::size_t ve
     vertexDataType = type;
 }
 
+std::vector<gfx::VertexAttribute::float2> Drawable::readPackedPositionsForTests() const {
+    VertexReader vertexReader;
+    if (!vertices.empty() && vertexDataType == gfx::AttributeDataType::Short2) {
+        vertexReader = VertexReader{vertices.data(), vertexCount, sizeof(std::int16_t) * 2};
+    } else if (const auto& attrs = getVertexAttributes()) {
+        const auto& attr = attrs->get(positionAttributeId);
+        if (attr && attr->getSharedRawData() && (attr->getSharedType() == gfx::AttributeDataType::Short2 ||
+                                                attr->getSharedType() == gfx::AttributeDataType::Short4) &&
+            attr->getSharedRawData()->getRawCount() >= attr->getSharedVertexOffset()) {
+            const auto* raw = static_cast<const std::uint8_t*>(attr->getSharedRawData()->getRawData());
+            vertexReader = VertexReader{raw + attr->getSharedOffset() + attr->getSharedVertexOffset() * attr->getSharedStride(),
+                                        vertexCount ? vertexCount : attr->getSharedRawData()->getRawCount() - attr->getSharedVertexOffset(),
+                                        attr->getSharedStride()};
+        } else if (attr && (attr->getDataType() == gfx::AttributeDataType::Short2 ||
+                            attr->getDataType() == gfx::AttributeDataType::Short4) &&
+                   !attr->getRawData().empty()) {
+            const auto stride = attr->getDataType() == gfx::AttributeDataType::Short4 ? sizeof(std::int16_t) * 4
+                                                                                      : sizeof(std::int16_t) * 2;
+            vertexReader = VertexReader{attr->getRawData().data(), vertexCount, stride};
+        }
+    }
+
+    std::vector<gfx::VertexAttribute::float2> positions(vertexReader.count);
+    for (std::size_t i = 0; i < vertexReader.count; ++i) {
+        if (!vertexReader.read(static_cast<std::uint16_t>(i), positions[i][0], positions[i][1])) {
+            return {};
+        }
+    }
+    return positions;
+}
+
 void Drawable::setIndexData(gfx::IndexVectorBasePtr indexes, std::vector<UniqueDrawSegment> segments_) {
     sharedIndexes = std::move(indexes);
     segments = std::move(segments_);
