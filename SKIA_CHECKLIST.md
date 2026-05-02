@@ -150,7 +150,7 @@
 - [ ] Pass fill extrusion base render tests. Active literal/default/function cases pass; negative-base remains a small diff and two data-driven cases are ignored upstream.
 - [x] Implement fill extrusion pattern shader/render path.
 - [x] Pass active fill extrusion pattern render tests.
-- [ ] Document unsupported fill extrusion behavior if deferred.
+- [x] Document fill extrusion support boundaries.
 - [x] Add headless Skia backend for render tests.
 - [ ] Add GLFW or platform sample integration for Skia backend.
 - [ ] Add Skia backend CI configure/build job.

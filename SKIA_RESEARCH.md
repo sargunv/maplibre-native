@@ -6,7 +6,7 @@ A Skia backend would fit into the newer drawables architecture. It would not be 
 
 The most plausible target is modern Skia with `SkMesh`, SkSL mesh programs, `SkCanvas::drawMesh`, `SkImage`/`SkShader` textures, and GPU-backed `SkSurface` render targets. `SkRuntimeEffect` is useful for fragment-style effects and child shader composition, but the core drawable path needs mesh vertex programs because MapLibre drawables depend on custom vertex attributes, indexed geometry, uniforms, textures, and per-layer shader logic.
 
-The first practical milestone should be flat 2D map rendering: background, fill, raster, line, and symbols. Fill extrusion can reasonably be deferred or degraded to a 2D fill footprint initially.
+The first practical milestone should be complete 2D map rendering plus the current mesh-backed fill extrusion path. Fill extrusion is supported as projected mesh geometry, with depth-buffer semantics intentionally degraded until a dedicated Skia 3D policy exists.
 
 ## Existing MapLibre Architecture
 
@@ -206,7 +206,9 @@ Debug groups are currently no-ops. They are safe to add later using Skia tracing
 
 Most 2D ordering is already expressed through MapLibre's layer order, opaque/translucent passes, and drawable sort order. The Skia backend can handle that without a depth buffer.
 
-Fill extrusion is the exception. A first Skia backend can reasonably defer it or degrade it to a regular 2D fill. The graceful degradation path is to draw the polygon footprint/top face with fill color and opacity while ignoring height, side walls, and lighting. Full extrusion support should be treated as a later project because it requires projected 3D geometry ordering, lighting, and depth-like behavior that does not map cleanly to portable `SkCanvas` state.
+Fill extrusion uses the existing extrusion bucket geometry and SkSL lighting logic. The Skia path renders solid and patterned extrusion meshes through `SkCanvas::drawMesh`, including height/base attributes, side normals, and light uniforms.
+
+The unsupported boundary is fixed-function 3D state. Skia does not expose a portable `SkCanvas` depth buffer or face-culling contract for this path, so extrusion ordering relies on MapLibre's layer/drawable order rather than depth tests. Future work that needs full 3D interleaving should define that policy separately instead of adding ad hoc depth behavior to 2D drawables.
 
 ## Layer Mapping
 
@@ -230,7 +232,7 @@ Initial layer mapping:
 | Heatmap | offscreen `SkSurface` accumulation and colorization SkSL |
 | Hillshade | DEM texture sampling in SkSL, likely offscreen prepare pass |
 | Color relief | DEM/color ramp texture sampling in SkSL |
-| Fill extrusion | defer, omit, or degrade to flat fill initially |
+| Fill extrusion | solid and patterned `SkMesh` extrusion path with degraded depth semantics |
 
 ## Suggested Milestones
 
@@ -243,7 +245,7 @@ Initial layer mapping:
 7. Add line shaders and line render tests.
 8. Add symbol icon and SDF text shaders.
 9. Add offscreen-pass-dependent layers such as heatmap, hillshade, and color relief.
-10. Decide whether fill extrusion remains unsupported, degraded, or becomes a separate full 3D effort.
+10. Document full-depth 3D limitations for fill extrusion and defer explicit depth semantics to a separate Skia 3D effort.
 
 ## Risks And Open Questions
 
