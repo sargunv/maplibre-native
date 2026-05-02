@@ -355,6 +355,102 @@ std::array<float, 2> linePositionFromPosNormal(const float x, const float y) {
     return {std::floor(x * 0.5f), std::floor(y * 0.5f)};
 }
 
+float projectedW(const std::array<float, 16>& matrix, const MeshVertex& vertex) {
+    return matrix[3] * vertex.position[0] + matrix[7] * vertex.position[1] + matrix[15];
+}
+
+constexpr float projectedNearW = 1.0e-4f;
+
+bool needsProjectedClipping(const std::vector<MeshVertex>& vertices,
+                            const std::vector<std::uint16_t>& indexes,
+                            const std::array<float, 16>& matrix) {
+    for (const auto index : indexes) {
+        if (index < vertices.size() && projectedW(matrix, vertices[index]) < projectedNearW) {
+            return true;
+        }
+    }
+    return false;
+}
+
+MeshVertex interpolateVertex(const MeshVertex& a, const MeshVertex& b, const float t) {
+    MeshVertex result;
+    const auto* from = reinterpret_cast<const float*>(&a);
+    const auto* to = reinterpret_cast<const float*>(&b);
+    auto* out = reinterpret_cast<float*>(&result);
+    constexpr auto count = sizeof(MeshVertex) / sizeof(float);
+    static_assert(sizeof(MeshVertex) % sizeof(float) == 0);
+    for (std::size_t i = 0; i < count; ++i) {
+        out[i] = from[i] + (to[i] - from[i]) * t;
+    }
+    return result;
+}
+
+bool clipProjectedTriangles(std::vector<MeshVertex>& vertices,
+                            std::vector<std::uint16_t>& indexes,
+                            const std::array<float, 16>& matrix) {
+    std::vector<MeshVertex> clippedVertices;
+    std::vector<std::uint16_t> clippedIndexes;
+    clippedVertices.reserve(vertices.size());
+    clippedIndexes.reserve(indexes.size());
+
+    struct ClipVertex {
+        MeshVertex vertex;
+        float w;
+    };
+
+    const auto appendClipped = [&](const ClipVertex& vertex) -> bool {
+        if (clippedVertices.size() >= std::numeric_limits<std::uint16_t>::max()) {
+            return false;
+        }
+        clippedIndexes.push_back(static_cast<std::uint16_t>(clippedVertices.size()));
+        clippedVertices.push_back(vertex.vertex);
+        return true;
+    };
+
+    for (std::size_t i = 0; i + 2 < indexes.size(); i += 3) {
+        if (indexes[i] >= vertices.size() || indexes[i + 1] >= vertices.size() || indexes[i + 2] >= vertices.size()) {
+            continue;
+        }
+
+        std::vector<ClipVertex> polygon = {{vertices[indexes[i]], projectedW(matrix, vertices[indexes[i]])},
+                                           {vertices[indexes[i + 1]], projectedW(matrix, vertices[indexes[i + 1]])},
+                                           {vertices[indexes[i + 2]], projectedW(matrix, vertices[indexes[i + 2]])}};
+        std::vector<ClipVertex> output;
+        output.reserve(4);
+        for (std::size_t j = 0; j < polygon.size(); ++j) {
+            const auto& current = polygon[j];
+            const auto& next = polygon[(j + 1) % polygon.size()];
+            const bool currentInside = current.w >= projectedNearW;
+            const bool nextInside = next.w >= projectedNearW;
+            if (currentInside && nextInside) {
+                output.push_back(next);
+            } else if (currentInside != nextInside) {
+                const float t = (projectedNearW - current.w) / (next.w - current.w);
+                output.push_back({interpolateVertex(current.vertex, next.vertex, t), projectedNearW});
+                if (nextInside) {
+                    output.push_back(next);
+                }
+            }
+        }
+
+        if (output.size() < 3) {
+            continue;
+        }
+        for (std::size_t j = 1; j + 1 < output.size(); ++j) {
+            if (!appendClipped(output[0]) || !appendClipped(output[j]) || !appendClipped(output[j + 1])) {
+                return false;
+            }
+        }
+    }
+
+    if (clippedIndexes.empty()) {
+        return false;
+    }
+    vertices = std::move(clippedVertices);
+    indexes = std::move(clippedIndexes);
+    return true;
+}
+
 std::array<float, 2> lineNormalFromPosNormal(const float x, const float y) {
     const auto pos = linePositionFromPosNormal(x, y);
     const auto normalX = x - 2.0f * pos[0];
@@ -4113,7 +4209,17 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
         }
     }
 
-    const auto& indexes = sharedIndexes->vector();
+    std::vector<std::uint16_t> clippedIndexes;
+    const auto* drawIndexes = &sharedIndexes->vector();
+    bool clippedProjected = false;
+    if (rasterDrawable && needsProjectedClipping(meshVertices, *drawIndexes, matrix)) {
+        clippedIndexes = *drawIndexes;
+        if (clipProjectedTriangles(meshVertices, clippedIndexes, matrix)) {
+            drawIndexes = &clippedIndexes;
+            clippedProjected = true;
+        }
+    }
+    const auto& indexes = *drawIndexes;
     const auto canvasSize = canvas->getBaseLayerSize();
     const float viewport[2] = {static_cast<float>(canvasSize.width()), static_cast<float>(canvasSize.height())};
     if (fillOutlinePatternDrawable) {
@@ -4750,6 +4856,24 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
     SkPaint paint;
     paint.setAntiAlias(true);
     paint.setBlendMode(blendModeFor(colorMode));
+
+    if (clippedProjected) {
+        const auto mesh = SkMesh::MakeIndexed(specification,
+                                              SkMesh::Mode::kTriangles,
+                                              vertexBuffer,
+                                              meshVertices.size(),
+                                              0,
+                                              indexBuffer,
+                                              indexes.size(),
+                                              0,
+                                              uniforms,
+                                              SkSpan<SkMesh::ChildPtr>(children.data(), childCount),
+                                              conservativeMeshBounds());
+        if (mesh.mesh.isValid()) {
+            canvas->drawMesh(mesh.mesh, SkBlender::Mode(SkBlendMode::kDst), paint);
+        }
+        return;
+    }
 
     for (const auto& segment : segments) {
         if (!segment || segment->getMode().type != gfx::DrawModeType::Triangles) {
