@@ -156,6 +156,7 @@
 - [ ] Add native GLFW window-surface presentation for Skia backend.
 - [x] Add Skia backend CI configure/build job.
 - [x] Add Skia backend render-test job once output is meaningful. CI runs a focused background/fill/line/raster smoke subset while full-suite parity gaps remain tracked separately.
+- [x] Inherit main macOS render-test ignores in the Skia manifest so upstream-ignored failures are not tracked as Skia-specific gaps.
 - [x] Add targeted unit tests for texture upload and offscreen readback.
 - [x] Add targeted unit tests for vertex attribute packing.
 - [x] Add targeted unit tests for uniform buffer packing.
@@ -170,5 +171,5 @@
 - [x] Remove placeholder no-op rendering once SkMesh path is active. Audited remaining Skia no-op methods; active rendering now goes through `SkMesh` or explicit Skia helpers, and remaining empty hooks are documented backend-policy no-ops.
 - [x] Remove temporary Skia smoke targets once render-test coverage is sufficient. Deleted `mbgl-skia-smoke` and `mbgl-skia-map-smoke`; Skia validation now relies on render-test smoke coverage, targeted resource tests, and the GLFW sample build.
 - [x] Remove temporary scaffold comments and dead code. Audited Skia source/header files after smoke target removal; no temporary scaffold comments or dead Skia stubs remain.
-- [ ] Reach parity target for initial 2D layer set. Target: every render test is either already ignored on main, passing with Skia, or failing with a narrowly documented deferral reason. Fill extrusion depth-buffer semantics are the expected acceptable deferral class; other failures are fix-required unless a similarly strong blocker is identified. Full-suite Skia baseline on 2026-05-02: 1177 passed, 7 ignored passed, 76 ignored, and 142 failed.
+- [ ] Reach parity target for initial 2D layer set. Target: every render test is either already ignored on main, passing with Skia, or failing with a narrowly documented deferral reason. Fill extrusion depth-buffer semantics are the expected acceptable deferral class; other failures are fix-required unless a similarly strong blocker is identified. Current full-suite Skia baseline on 2026-05-02 after hard tile clips and inherited macOS ignores: 1194 passed, 12 ignored passed, 79 ignored, and 117 failed.
 - [ ] Decide whether to graduate backend from experimental.

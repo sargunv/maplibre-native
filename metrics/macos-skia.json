@@ -5,7 +5,8 @@
       "expectations/platform-macos"
   ],
   "ignore_paths": [
-      "ignores/platform-all.json"
+      "ignores/platform-all.json",
+      "ignores/platform-macos.json"
   ],
   "metric_path": "macos-skia",
   "probes": [

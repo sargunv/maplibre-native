@@ -308,7 +308,7 @@ Current rendering limitations:
 
 Initial 2D parity target: every render test must be in one of three states before the backend can graduate from experimental: already ignored on main before the Skia branch, passing with Skia, or failing with a narrowly documented deferral reason. Expected deferrals should be exceptional; fill extrusion cases that require fixed-function depth-buffer semantics are the known acceptable class. Other failures should be treated as fix-required unless a similarly strong blocker is identified.
 
-Current full-suite baseline from 2026-05-02: 1177 passed, 7 ignored passed, 76 ignored, and 142 failed. Ten failures are in fill-extrusion families and may qualify for depth-semantics deferral after case-by-case review. The remaining failures are fix-required under the parity target.
+Current full-suite baseline from 2026-05-02 after hard tile clips and inherited macOS ignores: 1194 passed, 12 ignored passed, 79 ignored, and 117 failed. The Skia manifest includes `ignores/platform-macos.json`, so tests already ignored by the main macOS render-test baseline are classified as inherited ignores rather than Skia-specific failures. Ten failures are in fill-extrusion families and may qualify for depth-semantics deferral after case-by-case review. The remaining failures are fix-required under the parity target.
 
 ## Placeholder Rendering Cleanup
 
