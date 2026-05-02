@@ -1815,8 +1815,8 @@ sk_sp<SkMeshSpecification> symbolIconMeshSpecification() {
             float4 projected_pos = u_label_plane_matrix * float4(attrs.a_projected_pos.xy, 0.0, 1.0);
             float2 pos0 = projected_pos.xy / projected_pos.w;
             float2 pos_offset = a_offset * max(a_min_font_scale, float2(size)) / 32.0 + a_pxoffset / 16.0;
-            float2 rotated_offset = float2(angle_cos * pos_offset.x - angle_sin * pos_offset.y,
-                                           angle_sin * pos_offset.x + angle_cos * pos_offset.y);
+            float2 rotated_offset = float2(angle_cos * pos_offset.x + angle_sin * pos_offset.y,
+                                           -angle_sin * pos_offset.x + angle_cos * pos_offset.y);
             float4 position = u_coord_matrix * float4(pos0 + rotated_offset, 0.0, 1.0);
 
             varyings.position = project_to_screen(position);
@@ -1954,8 +1954,8 @@ sk_sp<SkMeshSpecification> symbolSDFMeshSpecification() {
 
             float4 projected_pos = u_label_plane_matrix * float4(attrs.a_projected_pos.xy, 0.0, 1.0);
             float2 pos_rot = a_offset / 32.0 * font_scale + a_pxoffset;
-            float2 rotated_offset = float2(angle_cos * pos_rot.x - angle_sin * pos_rot.y,
-                                           angle_sin * pos_rot.x + angle_cos * pos_rot.y);
+            float2 rotated_offset = float2(angle_cos * pos_rot.x + angle_sin * pos_rot.y,
+                                           -angle_sin * pos_rot.x + angle_cos * pos_rot.y);
             float2 pos0 = projected_pos.xy / projected_pos.w + rotated_offset;
             float4 position = u_coord_matrix * float4(pos0, 0.0, 1.0);
 
@@ -2120,8 +2120,8 @@ sk_sp<SkMeshSpecification> symbolTextAndIconMeshSpecification() {
 
             float4 projected_pos = u_label_plane_matrix * float4(attrs.a_projected_pos.xy, 0.0, 1.0);
             float2 pos_rot = a_offset / 32.0 * font_scale;
-            float2 rotated_offset = float2(angle_cos * pos_rot.x - angle_sin * pos_rot.y,
-                                           angle_sin * pos_rot.x + angle_cos * pos_rot.y);
+            float2 rotated_offset = float2(angle_cos * pos_rot.x + angle_sin * pos_rot.y,
+                                           -angle_sin * pos_rot.x + angle_cos * pos_rot.y);
             float2 pos0 = projected_pos.xy / projected_pos.w + rotated_offset;
             float4 position = u_coord_matrix * float4(pos0, 0.0, 1.0);
 
