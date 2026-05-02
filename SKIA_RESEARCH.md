@@ -238,6 +238,25 @@ Local result from 2026-05-02:
 
 The Skia failures are concentrated in line-label placement/spacing, line-placement text size, formatted line text, tile-map variable anchors, and CJK/vertical writing modes. The timing is close to Metal for this Debug smoke subset, but the parity gaps mean text-heavy performance should be revisited after the remaining symbol/text placement work lands.
 
+## Raster-Heavy Profiling
+
+Raster-heavy profiling uses raster property families, masking, rotation, zoomed/retina raster, and image-backed raster cases. These cases exercise raster texture upload, sampling, color adjustment, opacity, tile clipping, and projected image placement.
+
+The measured subset is selected with this filter:
+
+```sh
+render-tests/(raster-(brightness|contrast|hue-rotate|opacity|resampling|saturation)/(default|literal|function)|raster-(masking/(overlapping|overlapping-zoom|overlapping-vector)|rotation/(0|45|90|180|270)|extent/(minzoom|maxzoom)|alpha/default|visibility/visible)|zoomed-raster/(overzoom|underzoom|fractional)|retina-raster/default|image/(default|pitched|raster-(brightness|contrast|hue-rotate|opacity|resampling|saturation|visibility)))/style.json$
+```
+
+Local result from 2026-05-02:
+
+| Backend | Result | Wall time |
+| --- | --- | --- |
+| Skia | 41 passed, 1 ignored, 1 failed | 3.53s |
+| Metal | 42 passed, 1 ignored | 3.19s |
+
+The only Skia failure in this subset is `image/pitched`. Raster-heavy timing is close to Metal for local Debug builds, and the pass rate indicates the raster shader path is not a major parity risk compared with symbol/text and tile LOD work.
+
 ## Fixed-Function State
 
 The Skia backend maps MapLibre's fixed-function state only where Skia exposes an equivalent canvas or paint concept.
