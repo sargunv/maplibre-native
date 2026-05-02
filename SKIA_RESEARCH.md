@@ -216,12 +216,12 @@ The practical approach is:
 
 ```cpp
 canvas.save();
-canvas.clipPath(tilePathOrRect, SkClipOp::kIntersect, true);
+canvas.clipPath(tilePathOrRect, SkClipOp::kIntersect, false);
 drawable.draw(parameters);
 canvas.restore();
 ```
 
-This is a deliberate replacement for stencil-based clipping, not a missing backend feature. It should be adequate for 2D map content and keeps the implementation on public Skia APIs. It may have different performance characteristics than stencil clipping, so render tests and profiling should compare tile-heavy styles.
+This is a deliberate replacement for stencil-based clipping, not a missing backend feature. The clip is intentionally hard-edged rather than anti-aliased because GPU stencil clips do not blend tile boundaries; anti-aliased Skia clips introduced visible one-pixel seams in line tests. It should be adequate for 2D map content and keeps the implementation on public Skia APIs. It may have different performance characteristics than stencil clipping, so render tests and profiling should compare tile-heavy styles.
 
 ## Tile-Heavy Profiling
 

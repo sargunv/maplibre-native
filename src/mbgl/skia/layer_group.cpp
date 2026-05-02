@@ -65,7 +65,7 @@ void drawWithTileClip(gfx::Drawable& drawable,
         const auto path = tileClipPath(parameters, tileID->toUnwrapped());
         if (path) {
             SkAutoCanvasRestore autoRestore(canvas, true);
-            canvas->clipPath(*path, SkClipOp::kIntersect, true);
+            canvas->clipPath(*path, SkClipOp::kIntersect, false);
             skiaDrawable.draw(parameters, uniformBuffers);
             return;
         }
@@ -81,7 +81,7 @@ bool clipCanvasToTileForTests(SkCanvas& canvas, const mat4& matrix, const Size s
     if (!path) {
         return false;
     }
-    canvas.clipPath(*path, SkClipOp::kIntersect, true);
+    canvas.clipPath(*path, SkClipOp::kIntersect, false);
     return true;
 }
 

@@ -86,7 +86,7 @@
 - [x] Implement blend state mapping from `gfx::ColorMode` to Skia paint/blend configuration.
 - [x] Implement cull-face support or document no-op behavior for 2D layers.
 - [x] Implement depth mode support or document no-op/degraded behavior for 2D layers.
-- [x] Implement tile clipping with Skia canvas clip stack.
+- [x] Implement tile clipping with Skia canvas clip stack. Clips are hard-edged to match stencil behavior and avoid anti-aliased tile-boundary seams.
 - [x] Replace stencil tile clipping with Skia clip path/rect behavior in `TileLayerGroup`.
 - [x] Implement debug group/signpost behavior with Skia tracing where available. Current policy documents debug groups as rendering-safe no-ops until Skia tracing/signposts are added.
 - [x] Add Skia shader program base type.
