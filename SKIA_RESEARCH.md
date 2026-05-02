@@ -87,6 +87,21 @@ The backend should target a real Skia `SkSurface` or `SkCanvas`, preferably GPU-
 
 For owned offscreen rendering, the backend can create `SkSurface` instances and expose snapshots as `SkImage`-backed `Texture2D` objects. For host-provided rendering, the platform integration layer can provide the active `SkCanvas`/`SkSurface` for the frame. This is a platform integration concern, not a core renderer design requirement.
 
+## Platform Integration Requirements
+
+The current headless and GLFW integrations use a backend-owned renderable. Headless rendering reads pixels from that owned surface. The GLFW adapter builds and resizes the Skia backend, but it still renders offscreen and does not present into the native GLFW window surface.
+
+A production platform integration should provide or coordinate these pieces:
+
+- a Skia-compatible GPU context for the platform, preferably Ganesh for the current backend;
+- a current-frame `SkSurface` or `SkCanvas` whose size matches the platform framebuffer;
+- resize propagation into `RendererBackend::setSize()` before rendering the next frame;
+- a presentation step after `CommandEncoder::present()` flushes Skia work;
+- renderer-thread ownership for the context, surface, canvas, and MapLibre render calls;
+- a lifetime contract that keeps host surfaces valid until MapLibre has finished the frame and any retained snapshots are no longer needed.
+
+Apple builds currently create a backend-owned Metal Ganesh context. Linux/Android Vulkan and fallback GL context creation are not implemented yet, so those platforms should either add a matching Ganesh context factory or deliberately run through the raster fallback until GPU integration exists.
+
 ## GPU Context Policy
 
 The first Skia backend uses Ganesh. Graphite should remain a follow-up backend decision after Ganesh reaches useful render-test coverage because the current implementation depends on `GrDirectContext` and Ganesh surface creation.
