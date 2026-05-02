@@ -131,10 +131,10 @@
 - [x] Port symbol SDF text shader/render path.
 - [x] Port symbol text-and-icon shader/render path.
 - [x] Match GLSL symbol rotation signs in Skia. This fixed the text pitch-alignment and writing-mode clusters plus several line-placement, spacing, formatted text, debug, and regression cases.
-- [ ] Pass symbol icon render tests. Broad icon/text sweep is 319/378 passing with 4 ignored; core image/color/halo/opacity/size/rotate/anchor/translate cases pass, with remaining icon failures around icon-text-fit edge cases, icon padding, and pitched/rolled map alignment.
+- [ ] Pass symbol icon render tests. Broad icon/text sweep is 319/378 passing with 4 ignored; core image/color/halo/opacity/size/rotate/anchor/translate and icon-padding cases pass, with remaining icon failures around icon-text-fit edge cases and pitched/rolled map alignment.
 - [ ] Pass symbol text render tests. Core text color/halo/opacity/anchor/field/size/font/transform/translate cases pass; remaining failures are concentrated in line placement, pitch/roll/depth alignment, vertical/CJK writing modes, formatted line/images, and tile-map-mode variable anchors.
 - [x] Implement collision debug drawing.
-- [ ] Pass collision debug render tests. Focused collision sweep is 3/9 passing with 1 upstream ignored; remaining failures have visible debug geometry but differ in text-path placement or small collision-box offsets.
+- [x] Pass collision debug render tests. Active debug collision cases pass after matching GL's hard collision-box debug stroke behavior; upstream-ignored debug cases remain inherited ignores.
 - [x] Port heatmap accumulation pass.
 - [x] Port heatmap colorization pass.
 - [ ] Pass heatmap render tests. Core color/intensity/opacity cases pass; remaining radius/weight failures are small diffs, and combination parity still needs follow-up.
@@ -172,5 +172,5 @@
 - [x] Remove placeholder no-op rendering once SkMesh path is active. Audited remaining Skia no-op methods; active rendering now goes through `SkMesh` or explicit Skia helpers, and remaining empty hooks are documented backend-policy no-ops.
 - [x] Remove temporary Skia smoke targets once render-test coverage is sufficient. Deleted `mbgl-skia-smoke` and `mbgl-skia-map-smoke`; Skia validation now relies on render-test smoke coverage, targeted resource tests, and the GLFW sample build.
 - [x] Remove temporary scaffold comments and dead code. Audited Skia source/header files after smoke target removal; no temporary scaffold comments or dead Skia stubs remain.
-- [ ] Reach parity target for initial 2D layer set. Target: every render test is either already ignored on main, passing with Skia, or failing with a narrowly documented deferral reason. Fill extrusion depth-buffer semantics are the expected acceptable deferral class; other failures are fix-required unless a similarly strong blocker is identified. Current full-suite Skia baseline on 2026-05-02 after symbol rotation parity: 1250 passed, 12 ignored passed, 79 ignored, and 61 failed.
+- [ ] Reach parity target for initial 2D layer set. Target: every render test is either already ignored on main, passing with Skia, or failing with a narrowly documented deferral reason. Fill extrusion depth-buffer semantics are the expected acceptable deferral class; other failures are fix-required unless a similarly strong blocker is identified. Current full-suite Skia baseline on 2026-05-02 after collision debug stroke parity: 1255 passed, 12 ignored passed, 79 ignored, and 56 failed.
 - [ ] Decide whether to graduate backend from experimental.

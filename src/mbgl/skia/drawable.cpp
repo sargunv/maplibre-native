@@ -4323,7 +4323,7 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
 
     if (collisionBoxDrawable) {
         SkPaint linePaint;
-        linePaint.setAntiAlias(true);
+        linePaint.setAntiAlias(false);
         linePaint.setStyle(SkPaint::kStroke_Style);
         for (const auto& segment : segments) {
             if (!segment || segment->getMode().type != gfx::DrawModeType::Lines) {
