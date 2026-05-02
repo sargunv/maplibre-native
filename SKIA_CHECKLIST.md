@@ -29,8 +29,8 @@
 - [x] Add Skia dependency discovery and link wiring.
 - [x] Add Skia public/private include directories and compile definitions.
 - [x] Make Skia GPU support the default vendored build mode.
-- [ ] Require or clearly gate Skia runtime initialization when GPU support is unavailable.
-- [ ] Add platform GPU backend selection policy for Metal, Vulkan, and GL.
+- [x] Require or clearly gate Skia runtime initialization when GPU support is unavailable.
+- [x] Add platform GPU backend selection policy for Metal, Vulkan, and GL.
 - [x] Verify vendored Skia GPU library build on macOS Metal.
 - [ ] Verify vendored Skia GPU library build on Linux/Android Vulkan.
 - [ ] Verify vendored Skia GPU library build on fallback GL platforms.
@@ -39,9 +39,9 @@
 - [x] Verify vendored Skia static library build.
 - [ ] Add Skia forward declarations or wrapper headers for `SkShader` and `SkMeshSpecification`.
 - [x] Replace placeholder default renderable with a host-provided or owned `SkSurface` renderable.
-- [ ] Define GPU-first Skia platform integration ownership model for default surfaces.
+- [x] Define GPU-first Skia platform integration ownership model for default surfaces.
 - [x] Add `GrDirectContext` ownership to the Skia backend for Ganesh rendering.
-- [ ] Decide whether Graphite should replace or follow Ganesh for the first GPU backend.
+- [x] Decide whether Graphite should replace or follow Ganesh for the first GPU backend.
 - [x] Create Metal-backed `GrDirectContext` on Apple platforms.
 - [ ] Create Vulkan-backed `GrDirectContext` on Linux/Android platforms.
 - [ ] Create GL-backed `GrDirectContext` only as a fallback GPU path.
@@ -60,7 +60,7 @@
 - [x] Implement offscreen texture as a temporary raster `SkSurface` prototype.
 - [x] Implement offscreen texture snapshot to `Texture2D`.
 - [x] Implement offscreen texture `readStillImage()` via `readPixels`.
-- [ ] Implement offscreen texture as a GPU-backed `SkSurface` where available.
+- [x] Implement offscreen texture as a GPU-backed `SkSurface` where available.
 - [x] Create offscreen textures as GPU-backed `SkSurface`s when a GPU context is available.
 - [ ] Remove or hard-gate raster offscreen texture path once GPU offscreen surfaces are available.
 - [ ] Define Skia uniform byte layout and ownership model.

@@ -87,6 +87,20 @@ The backend should target a real Skia `SkSurface` or `SkCanvas`, preferably GPU-
 
 For owned offscreen rendering, the backend can create `SkSurface` instances and expose snapshots as `SkImage`-backed `Texture2D` objects. For host-provided rendering, the platform integration layer can provide the active `SkCanvas`/`SkSurface` for the frame. This is a platform integration concern, not a core renderer design requirement.
 
+## GPU Context Policy
+
+The first Skia backend uses Ganesh. Graphite should remain a follow-up backend decision after Ganesh reaches useful render-test coverage because the current implementation depends on `GrDirectContext` and Ganesh surface creation.
+
+Runtime GPU initialization is best-effort. `skia::RendererBackend` owns an optional `GrDirectContext`; Apple builds create it from the default Metal device and command queue when `MLN_SKIA_ENABLE_GPU` is enabled. If GPU initialization fails or the platform has no Skia GPU context implementation yet, renderable and offscreen resources fall back to raster `SkSurface`s.
+
+Platform selection policy:
+
+- Apple platforms use Metal through Ganesh.
+- Linux and Android Vulkan support is not implemented yet.
+- GL is reserved for a fallback GPU path after the Metal path is stable.
+
+Owned default renderables and offscreen textures use GPU-backed `SkSurface`s when a `GrDirectContext` is available. The raster path remains a compatibility fallback until non-Apple GPU paths and host-provided surface ownership are defined.
+
 ## Drawables With SkMesh
 
 The concrete drawable path should be:
