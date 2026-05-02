@@ -308,6 +308,12 @@ Current rendering limitations:
 
 Current parity gaps are concentrated in line gradients and pitched line patterns, full line and circle suites, symbol text/icon edge cases, collision debug placement offsets, heatmap radius/weight combinations, color-relief/hillshade sandwich cases, fill extrusion negative base, tile LOD behavior, CJK/vertical text, and pitched image placement.
 
+## Placeholder Rendering Cleanup
+
+The initial placeholder rendering path has been replaced by layer-specific `SkMesh` draw paths and explicit Skia helpers for canvas-backed operations such as background clears, tile clips, collision debug drawing, heatmap/colorization passes, and offscreen readback.
+
+Remaining empty methods are intentional backend-policy no-ops rather than placeholder rendering. These include frame lifecycle hooks with no Skia state to reset, fixed-function state calls that Skia does not expose through `SkCanvas`, global uniform buffer binding for shaders that read per-drawable data directly, debug visualization hooks, and backend activate/deactivate hooks.
+
 ## Fixed-Function State
 
 The Skia backend maps MapLibre's fixed-function state only where Skia exposes an equivalent canvas or paint concept.
