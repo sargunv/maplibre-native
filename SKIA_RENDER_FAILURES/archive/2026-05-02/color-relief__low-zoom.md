@@ -1,3 +1,5 @@
+> Archived 2026-05-02 after the full Skia sweep passed; no code change was needed for this case.
+
 # render-tests/color-relief/low-zoom
 
 - Status: active

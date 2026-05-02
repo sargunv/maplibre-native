@@ -1,3 +1,5 @@
+> Archived 2026-05-02 after focused and full sweeps passed with Skia debug line-strip rendering.
+
 # render-tests/text-variable-anchor/left-top-right-bottom-offset-tile-map-mode
 
 - Status: active

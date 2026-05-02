@@ -1,3 +1,5 @@
+> Archived 2026-05-02 after focused and full sweeps passed with Skia debug line-strip rendering.
+
 # render-tests/symbol-placement/line-center-buffer-tile-map-mode
 
 - Status: active

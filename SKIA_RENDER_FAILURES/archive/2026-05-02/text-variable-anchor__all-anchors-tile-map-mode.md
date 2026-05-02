@@ -1,3 +1,5 @@
+> Archived 2026-05-02 after focused and full sweeps passed with Skia debug line-strip rendering.
+
 # render-tests/text-variable-anchor/all-anchors-tile-map-mode
 
 - Status: active

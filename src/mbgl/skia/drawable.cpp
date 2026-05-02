@@ -8,6 +8,7 @@
 #include <mbgl/shaders/circle_layer_ubo.hpp>
 #include <mbgl/shaders/collision_layer_ubo.hpp>
 #include <mbgl/shaders/color_relief_layer_ubo.hpp>
+#include <mbgl/shaders/debug_layer_ubo.hpp>
 #include <mbgl/shaders/fill_extrusion_layer_ubo.hpp>
 #include <mbgl/shaders/fill_layer_ubo.hpp>
 #include <mbgl/shaders/heatmap_layer_ubo.hpp>
@@ -40,6 +41,7 @@
 #include <cstdint>
 #include <cstring>
 #include <limits>
+#include <optional>
 #include <string>
 #include <type_traits>
 #include <variant>
@@ -330,7 +332,8 @@ SkColor4f unpackMixColor(const std::array<float, 4>& packedColors, const float t
     if (std::ranges::all_of(packedColors, [](const auto value) { return value >= 0.0f && value <= 1.0f; })) {
         return SkColor4f{packedColors[0], packedColors[1], packedColors[2], packedColors[3]};
     }
-    return mixColors(decodeColor({packedColors[0], packedColors[1]}), decodeColor({packedColors[2], packedColors[3]}), t);
+    return mixColors(
+        decodeColor({packedColors[0], packedColors[1]}), decodeColor({packedColors[2], packedColors[3]}), t);
 }
 
 float unpackMixFloat(const std::array<float, 2>& packedValue, const float t) {
@@ -483,15 +486,16 @@ std::array<float, 2> lineExtrudePosition(const float posX,
     const auto u = 0.5f * direction;
     const auto t = 1.0f - std::abs(u);
     const auto safeRatio = ratio == 0.0f ? 1.0f : ratio;
-    const auto offsetX = offset * extrudeX * lineNormalScale * normalY * t + offset * extrudeY * lineNormalScale * normalY * u;
-    const auto offsetY = offset * extrudeX * lineNormalScale * normalY * -u + offset * extrudeY * lineNormalScale * normalY * t;
+    const auto offsetX = offset * extrudeX * lineNormalScale * normalY * t +
+                         offset * extrudeY * lineNormalScale * normalY * u;
+    const auto offsetY = offset * extrudeX * lineNormalScale * normalY * -u +
+                         offset * extrudeY * lineNormalScale * normalY * t;
     return {posX + (offsetX + outset * extrudeX * lineNormalScale) / safeRatio,
             posY + (offsetY + outset * extrudeY * lineNormalScale) / safeRatio};
 }
 
 std::array<float, 2> modPositive(const std::array<float, 2>& x, const std::array<float, 2>& y) {
-    return {x[0] - y[0] * std::floor(x[0] / y[0]),
-            x[1] - y[1] * std::floor(x[1] / y[1])};
+    return {x[0] - y[0] * std::floor(x[0] / y[0]), x[1] - y[1] * std::floor(x[1] / y[1])};
 }
 
 std::array<float, 2> getPatternPos(const std::array<float, 2>& pixelCoordUpper,
@@ -501,9 +505,9 @@ std::array<float, 2> getPatternPos(const std::array<float, 2>& pixelCoordUpper,
                                    const std::array<float, 2>& pos) {
     const auto first = modPositive(pixelCoordUpper, patternSize);
     const auto second = modPositive({first[0] * 256.0f, first[1] * 256.0f}, patternSize);
-    const auto offset = modPositive({second[0] * 256.0f + pixelCoordLower[0], second[1] * 256.0f + pixelCoordLower[1]}, patternSize);
-    return {(tileRatio * pos[0] + offset[0]) / patternSize[0],
-            (tileRatio * pos[1] + offset[1]) / patternSize[1]};
+    const auto offset = modPositive({second[0] * 256.0f + pixelCoordLower[0], second[1] * 256.0f + pixelCoordLower[1]},
+                                    patternSize);
+    return {(tileRatio * pos[0] + offset[0]) / patternSize[0], (tileRatio * pos[1] + offset[1]) / patternSize[1]};
 }
 
 sk_sp<SkMeshSpecification> solidColorMeshSpecification() {
@@ -543,12 +547,12 @@ sk_sp<SkMeshSpecification> solidColorMeshSpecification() {
     )");
 
     auto [spec, error] = SkMeshSpecification::Make(attributes,
-                                                    sizeof(MeshVertex),
-                                                    varyings,
-                                                    vertexShader,
-                                                    fragmentShader,
-                                                    SkColorSpace::MakeSRGB(),
-                                                    kPremul_SkAlphaType);
+                                                   sizeof(MeshVertex),
+                                                   varyings,
+                                                   vertexShader,
+                                                   fragmentShader,
+                                                   SkColorSpace::MakeSRGB(),
+                                                   kPremul_SkAlphaType);
     (void)error;
     specification = std::move(spec);
     return specification;
@@ -591,12 +595,12 @@ sk_sp<SkMeshSpecification> fillExtrusionMeshSpecification() {
     )");
 
     auto [spec, error] = SkMeshSpecification::Make(attributes,
-                                                    sizeof(MeshVertex),
-                                                    varyings,
-                                                    vertexShader,
-                                                    fragmentShader,
-                                                    SkColorSpace::MakeSRGB(),
-                                                    kPremul_SkAlphaType);
+                                                   sizeof(MeshVertex),
+                                                   varyings,
+                                                   vertexShader,
+                                                   fragmentShader,
+                                                   SkColorSpace::MakeSRGB(),
+                                                   kPremul_SkAlphaType);
     (void)error;
     specification = std::move(spec);
     return specification;
@@ -610,12 +614,13 @@ sk_sp<SkMeshSpecification> fillExtrusionPatternMeshSpecification() {
 
     using Attribute = SkMeshSpecification::Attribute;
     using Varying = SkMeshSpecification::Varying;
-    const Attribute attributes[] = {{Attribute::Type::kFloat2, offsetof(MeshVertex, position), SkString("a_pos")},
-                                    {Attribute::Type::kFloat, offsetof(MeshVertex, fillExtrusionZ), SkString("a_z")},
-                                    {Attribute::Type::kFloat2, offsetof(MeshVertex, fillPatternPosA), SkString("a_pattern_pos_a")},
-                                    {Attribute::Type::kFloat2, offsetof(MeshVertex, fillPatternPosB), SkString("a_pattern_pos_b")},
-                                    {Attribute::Type::kFloat4, offsetof(MeshVertex, fillPatternFrom), SkString("a_pattern_from")},
-                                    {Attribute::Type::kFloat4, offsetof(MeshVertex, fillPatternTo), SkString("a_pattern_to")}};
+    const Attribute attributes[] = {
+        {Attribute::Type::kFloat2, offsetof(MeshVertex, position), SkString("a_pos")},
+        {Attribute::Type::kFloat, offsetof(MeshVertex, fillExtrusionZ), SkString("a_z")},
+        {Attribute::Type::kFloat2, offsetof(MeshVertex, fillPatternPosA), SkString("a_pattern_pos_a")},
+        {Attribute::Type::kFloat2, offsetof(MeshVertex, fillPatternPosB), SkString("a_pattern_pos_b")},
+        {Attribute::Type::kFloat4, offsetof(MeshVertex, fillPatternFrom), SkString("a_pattern_from")},
+        {Attribute::Type::kFloat4, offsetof(MeshVertex, fillPatternTo), SkString("a_pattern_to")}};
     const Varying varyings[] = {{Varying::Type::kFloat2, SkString("pos_a")},
                                 {Varying::Type::kFloat2, SkString("pos_b")},
                                 {Varying::Type::kFloat4, SkString("pattern_from")},
@@ -664,12 +669,12 @@ sk_sp<SkMeshSpecification> fillExtrusionPatternMeshSpecification() {
     )");
 
     auto [spec, error] = SkMeshSpecification::Make(attributes,
-                                                    sizeof(MeshVertex),
-                                                    varyings,
-                                                    vertexShader,
-                                                    fragmentShader,
-                                                    SkColorSpace::MakeSRGB(),
-                                                    kPremul_SkAlphaType);
+                                                   sizeof(MeshVertex),
+                                                   varyings,
+                                                   vertexShader,
+                                                   fragmentShader,
+                                                   SkColorSpace::MakeSRGB(),
+                                                   kPremul_SkAlphaType);
     (void)error;
     specification = std::move(spec);
     return specification;
@@ -723,12 +728,12 @@ sk_sp<SkMeshSpecification> lineMeshSpecification() {
     )");
 
     auto [spec, error] = SkMeshSpecification::Make(attributes,
-                                                    sizeof(MeshVertex),
-                                                    varyings,
-                                                    vertexShader,
-                                                    fragmentShader,
-                                                    SkColorSpace::MakeSRGB(),
-                                                    kPremul_SkAlphaType);
+                                                   sizeof(MeshVertex),
+                                                   varyings,
+                                                   vertexShader,
+                                                   fragmentShader,
+                                                   SkColorSpace::MakeSRGB(),
+                                                   kPremul_SkAlphaType);
     (void)error;
     specification = std::move(spec);
     return specification;
@@ -742,12 +747,13 @@ sk_sp<SkMeshSpecification> lineGradientMeshSpecification() {
 
     using Attribute = SkMeshSpecification::Attribute;
     using Varying = SkMeshSpecification::Varying;
-    const Attribute attributes[] = {{Attribute::Type::kFloat2, offsetof(MeshVertex, position), SkString("a_pos")},
-                                    {Attribute::Type::kFloat4, offsetof(MeshVertex, color), SkString("a_color")},
-                                    {Attribute::Type::kFloat2, offsetof(MeshVertex, lineNormal), SkString("a_normal")},
-                                    {Attribute::Type::kFloat2, offsetof(MeshVertex, lineWidth), SkString("a_width")},
-                                    {Attribute::Type::kFloat, offsetof(MeshVertex, lineBlur), SkString("a_blur")},
-                                    {Attribute::Type::kFloat, offsetof(MeshVertex, lineProgress), SkString("a_progress")}};
+    const Attribute attributes[] = {
+        {Attribute::Type::kFloat2, offsetof(MeshVertex, position), SkString("a_pos")},
+        {Attribute::Type::kFloat4, offsetof(MeshVertex, color), SkString("a_color")},
+        {Attribute::Type::kFloat2, offsetof(MeshVertex, lineNormal), SkString("a_normal")},
+        {Attribute::Type::kFloat2, offsetof(MeshVertex, lineWidth), SkString("a_width")},
+        {Attribute::Type::kFloat, offsetof(MeshVertex, lineBlur), SkString("a_blur")},
+        {Attribute::Type::kFloat, offsetof(MeshVertex, lineProgress), SkString("a_progress")}};
     const Varying varyings[] = {{Varying::Type::kFloat4, SkString("color")},
                                 {Varying::Type::kFloat2, SkString("normal")},
                                 {Varying::Type::kFloat2, SkString("width")},
@@ -788,12 +794,12 @@ sk_sp<SkMeshSpecification> lineGradientMeshSpecification() {
     )");
 
     auto [spec, error] = SkMeshSpecification::Make(attributes,
-                                                    sizeof(MeshVertex),
-                                                    varyings,
-                                                    vertexShader,
-                                                    fragmentShader,
-                                                    SkColorSpace::MakeSRGB(),
-                                                    kPremul_SkAlphaType);
+                                                   sizeof(MeshVertex),
+                                                   varyings,
+                                                   vertexShader,
+                                                   fragmentShader,
+                                                   SkColorSpace::MakeSRGB(),
+                                                   kPremul_SkAlphaType);
     (void)error;
     specification = std::move(spec);
     return specification;
@@ -807,14 +813,15 @@ sk_sp<SkMeshSpecification> linePatternMeshSpecification() {
 
     using Attribute = SkMeshSpecification::Attribute;
     using Varying = SkMeshSpecification::Varying;
-    const Attribute attributes[] = {{Attribute::Type::kFloat2, offsetof(MeshVertex, position), SkString("a_pos")},
-                                    {Attribute::Type::kFloat4, offsetof(MeshVertex, color), SkString("a_color")},
-                                    {Attribute::Type::kFloat2, offsetof(MeshVertex, lineNormal), SkString("a_normal")},
-                                    {Attribute::Type::kFloat2, offsetof(MeshVertex, lineWidth), SkString("a_width")},
-                                    {Attribute::Type::kFloat, offsetof(MeshVertex, lineBlur), SkString("a_blur")},
-                                    {Attribute::Type::kFloat, offsetof(MeshVertex, lineProgress), SkString("a_progress")},
-                                    {Attribute::Type::kFloat4, offsetof(MeshVertex, fillPatternFrom), SkString("a_pattern_from")},
-                                    {Attribute::Type::kFloat4, offsetof(MeshVertex, fillPatternTo), SkString("a_pattern_to")}};
+    const Attribute attributes[] = {
+        {Attribute::Type::kFloat2, offsetof(MeshVertex, position), SkString("a_pos")},
+        {Attribute::Type::kFloat4, offsetof(MeshVertex, color), SkString("a_color")},
+        {Attribute::Type::kFloat2, offsetof(MeshVertex, lineNormal), SkString("a_normal")},
+        {Attribute::Type::kFloat2, offsetof(MeshVertex, lineWidth), SkString("a_width")},
+        {Attribute::Type::kFloat, offsetof(MeshVertex, lineBlur), SkString("a_blur")},
+        {Attribute::Type::kFloat, offsetof(MeshVertex, lineProgress), SkString("a_progress")},
+        {Attribute::Type::kFloat4, offsetof(MeshVertex, fillPatternFrom), SkString("a_pattern_from")},
+        {Attribute::Type::kFloat4, offsetof(MeshVertex, fillPatternTo), SkString("a_pattern_to")}};
     const Varying varyings[] = {{Varying::Type::kFloat4, SkString("color")},
                                 {Varying::Type::kFloat4, SkString("line_a")},
                                 {Varying::Type::kFloat2, SkString("line_b")},
@@ -893,12 +900,12 @@ sk_sp<SkMeshSpecification> linePatternMeshSpecification() {
     )");
 
     auto [spec, error] = SkMeshSpecification::Make(attributes,
-                                                    sizeof(MeshVertex),
-                                                    varyings,
-                                                    vertexShader,
-                                                    fragmentShader,
-                                                    SkColorSpace::MakeSRGB(),
-                                                    kPremul_SkAlphaType);
+                                                   sizeof(MeshVertex),
+                                                   varyings,
+                                                   vertexShader,
+                                                   fragmentShader,
+                                                   SkColorSpace::MakeSRGB(),
+                                                   kPremul_SkAlphaType);
     (void)error;
     specification = std::move(spec);
     return specification;
@@ -912,13 +919,14 @@ sk_sp<SkMeshSpecification> lineSDFMeshSpecification() {
 
     using Attribute = SkMeshSpecification::Attribute;
     using Varying = SkMeshSpecification::Varying;
-    const Attribute attributes[] = {{Attribute::Type::kFloat2, offsetof(MeshVertex, position), SkString("a_pos")},
-                                    {Attribute::Type::kFloat4, offsetof(MeshVertex, color), SkString("a_color")},
-                                    {Attribute::Type::kFloat2, offsetof(MeshVertex, lineNormal), SkString("a_normal")},
-                                    {Attribute::Type::kFloat2, offsetof(MeshVertex, lineWidth), SkString("a_width")},
-                                    {Attribute::Type::kFloat, offsetof(MeshVertex, lineBlur), SkString("a_blur")},
-                                    {Attribute::Type::kFloat, offsetof(MeshVertex, lineProgress), SkString("a_progress")},
-                                    {Attribute::Type::kFloat, offsetof(MeshVertex, lineFloorWidth), SkString("a_floorwidth")}};
+    const Attribute attributes[] = {
+        {Attribute::Type::kFloat2, offsetof(MeshVertex, position), SkString("a_pos")},
+        {Attribute::Type::kFloat4, offsetof(MeshVertex, color), SkString("a_color")},
+        {Attribute::Type::kFloat2, offsetof(MeshVertex, lineNormal), SkString("a_normal")},
+        {Attribute::Type::kFloat2, offsetof(MeshVertex, lineWidth), SkString("a_width")},
+        {Attribute::Type::kFloat, offsetof(MeshVertex, lineBlur), SkString("a_blur")},
+        {Attribute::Type::kFloat, offsetof(MeshVertex, lineProgress), SkString("a_progress")},
+        {Attribute::Type::kFloat, offsetof(MeshVertex, lineFloorWidth), SkString("a_floorwidth")}};
     const Varying varyings[] = {{Varying::Type::kFloat4, SkString("color")},
                                 {Varying::Type::kFloat2, SkString("normal")},
                                 {Varying::Type::kFloat2, SkString("width")},
@@ -982,12 +990,12 @@ sk_sp<SkMeshSpecification> lineSDFMeshSpecification() {
     )");
 
     auto [spec, error] = SkMeshSpecification::Make(attributes,
-                                                    sizeof(MeshVertex),
-                                                    varyings,
-                                                    vertexShader,
-                                                    fragmentShader,
-                                                    SkColorSpace::MakeSRGB(),
-                                                    kPremul_SkAlphaType);
+                                                   sizeof(MeshVertex),
+                                                   varyings,
+                                                   vertexShader,
+                                                   fragmentShader,
+                                                   SkColorSpace::MakeSRGB(),
+                                                   kPremul_SkAlphaType);
     (void)error;
     specification = std::move(spec);
     return specification;
@@ -1001,11 +1009,12 @@ sk_sp<SkMeshSpecification> circleMeshSpecification() {
 
     using Attribute = SkMeshSpecification::Attribute;
     using Varying = SkMeshSpecification::Varying;
-    const Attribute attributes[] = {{Attribute::Type::kFloat2, offsetof(MeshVertex, position), SkString("a_pos")},
-                                    {Attribute::Type::kFloat2, offsetof(MeshVertex, circleExtrude), SkString("a_extrude")},
-                                    {Attribute::Type::kFloat4, offsetof(MeshVertex, circleColor), SkString("a_color")},
-                                    {Attribute::Type::kFloat4, offsetof(MeshVertex, circleStrokeColor), SkString("a_stroke_color")},
-                                    {Attribute::Type::kFloat4, offsetof(MeshVertex, circleData), SkString("a_data")}};
+    const Attribute attributes[] = {
+        {Attribute::Type::kFloat2, offsetof(MeshVertex, position), SkString("a_pos")},
+        {Attribute::Type::kFloat2, offsetof(MeshVertex, circleExtrude), SkString("a_extrude")},
+        {Attribute::Type::kFloat4, offsetof(MeshVertex, circleColor), SkString("a_color")},
+        {Attribute::Type::kFloat4, offsetof(MeshVertex, circleStrokeColor), SkString("a_stroke_color")},
+        {Attribute::Type::kFloat4, offsetof(MeshVertex, circleData), SkString("a_data")}};
     const Varying varyings[] = {{Varying::Type::kFloat2, SkString("extrude")},
                                 {Varying::Type::kFloat4, SkString("color")},
                                 {Varying::Type::kFloat4, SkString("stroke_color")},
@@ -1082,12 +1091,12 @@ sk_sp<SkMeshSpecification> circleMeshSpecification() {
     )");
 
     auto [spec, error] = SkMeshSpecification::Make(attributes,
-                                                    sizeof(MeshVertex),
-                                                    varyings,
-                                                    vertexShader,
-                                                    fragmentShader,
-                                                    SkColorSpace::MakeSRGB(),
-                                                    kPremul_SkAlphaType);
+                                                   sizeof(MeshVertex),
+                                                   varyings,
+                                                   vertexShader,
+                                                   fragmentShader,
+                                                   SkColorSpace::MakeSRGB(),
+                                                   kPremul_SkAlphaType);
     (void)error;
     specification = std::move(spec);
     return specification;
@@ -1101,10 +1110,10 @@ sk_sp<SkMeshSpecification> rasterMeshSpecification() {
 
     using Attribute = SkMeshSpecification::Attribute;
     using Varying = SkMeshSpecification::Varying;
-    const Attribute attributes[] = {{Attribute::Type::kFloat2, offsetof(MeshVertex, position), SkString("a_pos")},
-                                    {Attribute::Type::kFloat2, offsetof(MeshVertex, rasterTexturePos), SkString("a_texture_pos")}};
-    const Varying varyings[] = {{Varying::Type::kFloat2, SkString("pos0")},
-                                {Varying::Type::kFloat2, SkString("pos1")}};
+    const Attribute attributes[] = {
+        {Attribute::Type::kFloat2, offsetof(MeshVertex, position), SkString("a_pos")},
+        {Attribute::Type::kFloat2, offsetof(MeshVertex, rasterTexturePos), SkString("a_texture_pos")}};
+    const Varying varyings[] = {{Varying::Type::kFloat2, SkString("pos0")}, {Varying::Type::kFloat2, SkString("pos1")}};
 
     const SkString vertexShader(R"(
         uniform float4x4 u_matrix;
@@ -1170,12 +1179,12 @@ sk_sp<SkMeshSpecification> rasterMeshSpecification() {
     )");
 
     auto [spec, error] = SkMeshSpecification::Make(attributes,
-                                                    sizeof(MeshVertex),
-                                                    varyings,
-                                                    vertexShader,
-                                                    fragmentShader,
-                                                    SkColorSpace::MakeSRGB(),
-                                                    kPremul_SkAlphaType);
+                                                   sizeof(MeshVertex),
+                                                   varyings,
+                                                   vertexShader,
+                                                   fragmentShader,
+                                                   SkColorSpace::MakeSRGB(),
+                                                   kPremul_SkAlphaType);
     (void)error;
     specification = std::move(spec);
     return specification;
@@ -1189,8 +1198,9 @@ sk_sp<SkMeshSpecification> colorReliefMeshSpecification() {
 
     using Attribute = SkMeshSpecification::Attribute;
     using Varying = SkMeshSpecification::Varying;
-    const Attribute attributes[] = {{Attribute::Type::kFloat2, offsetof(MeshVertex, position), SkString("a_pos")},
-                                    {Attribute::Type::kFloat2, offsetof(MeshVertex, rasterTexturePos), SkString("a_texture_pos")}};
+    const Attribute attributes[] = {
+        {Attribute::Type::kFloat2, offsetof(MeshVertex, position), SkString("a_pos")},
+        {Attribute::Type::kFloat2, offsetof(MeshVertex, rasterTexturePos), SkString("a_texture_pos")}};
     const Varying varyings[] = {{Varying::Type::kFloat2, SkString("dem_pos")}};
 
     const SkString vertexShader(R"(
@@ -1268,12 +1278,12 @@ sk_sp<SkMeshSpecification> colorReliefMeshSpecification() {
     )");
 
     auto [spec, error] = SkMeshSpecification::Make(attributes,
-                                                    sizeof(MeshVertex),
-                                                    varyings,
-                                                    vertexShader,
-                                                    fragmentShader,
-                                                    SkColorSpace::MakeSRGB(),
-                                                    kPremul_SkAlphaType);
+                                                   sizeof(MeshVertex),
+                                                   varyings,
+                                                   vertexShader,
+                                                   fragmentShader,
+                                                   SkColorSpace::MakeSRGB(),
+                                                   kPremul_SkAlphaType);
     (void)error;
     specification = std::move(spec);
     return specification;
@@ -1287,8 +1297,9 @@ sk_sp<SkMeshSpecification> hillshadePrepareMeshSpecification() {
 
     using Attribute = SkMeshSpecification::Attribute;
     using Varying = SkMeshSpecification::Varying;
-    const Attribute attributes[] = {{Attribute::Type::kFloat2, offsetof(MeshVertex, position), SkString("a_pos")},
-                                    {Attribute::Type::kFloat2, offsetof(MeshVertex, rasterTexturePos), SkString("a_texture_pos")}};
+    const Attribute attributes[] = {
+        {Attribute::Type::kFloat2, offsetof(MeshVertex, position), SkString("a_pos")},
+        {Attribute::Type::kFloat2, offsetof(MeshVertex, rasterTexturePos), SkString("a_texture_pos")}};
     const Varying varyings[] = {{Varying::Type::kFloat2, SkString("dem_pos")}};
 
     const SkString vertexShader(R"(
@@ -1351,12 +1362,12 @@ sk_sp<SkMeshSpecification> hillshadePrepareMeshSpecification() {
     )");
 
     auto [spec, error] = SkMeshSpecification::Make(attributes,
-                                                    sizeof(MeshVertex),
-                                                    varyings,
-                                                    vertexShader,
-                                                    fragmentShader,
-                                                    SkColorSpace::MakeSRGB(),
-                                                    kPremul_SkAlphaType);
+                                                   sizeof(MeshVertex),
+                                                   varyings,
+                                                   vertexShader,
+                                                   fragmentShader,
+                                                   SkColorSpace::MakeSRGB(),
+                                                   kPremul_SkAlphaType);
     (void)error;
     specification = std::move(spec);
     return specification;
@@ -1370,8 +1381,9 @@ sk_sp<SkMeshSpecification> hillshadeMeshSpecification() {
 
     using Attribute = SkMeshSpecification::Attribute;
     using Varying = SkMeshSpecification::Varying;
-    const Attribute attributes[] = {{Attribute::Type::kFloat2, offsetof(MeshVertex, position), SkString("a_pos")},
-                                    {Attribute::Type::kFloat2, offsetof(MeshVertex, rasterTexturePos), SkString("a_texture_pos")}};
+    const Attribute attributes[] = {
+        {Attribute::Type::kFloat2, offsetof(MeshVertex, position), SkString("a_pos")},
+        {Attribute::Type::kFloat2, offsetof(MeshVertex, rasterTexturePos), SkString("a_texture_pos")}};
     const Varying varyings[] = {{Varying::Type::kFloat2, SkString("dem_pos")},
                                 {Varying::Type::kFloat2, SkString("tile_pos")}};
 
@@ -1561,12 +1573,12 @@ sk_sp<SkMeshSpecification> hillshadeMeshSpecification() {
     )");
 
     auto [spec, error] = SkMeshSpecification::Make(attributes,
-                                                    sizeof(MeshVertex),
-                                                    varyings,
-                                                    vertexShader,
-                                                    fragmentShader,
-                                                    SkColorSpace::MakeSRGB(),
-                                                    kPremul_SkAlphaType);
+                                                   sizeof(MeshVertex),
+                                                   varyings,
+                                                   vertexShader,
+                                                   fragmentShader,
+                                                   SkColorSpace::MakeSRGB(),
+                                                   kPremul_SkAlphaType);
     (void)error;
     specification = std::move(spec);
     return specification;
@@ -1580,9 +1592,10 @@ sk_sp<SkMeshSpecification> heatmapMeshSpecification() {
 
     using Attribute = SkMeshSpecification::Attribute;
     using Varying = SkMeshSpecification::Varying;
-    const Attribute attributes[] = {{Attribute::Type::kFloat2, offsetof(MeshVertex, position), SkString("a_pos")},
-                                    {Attribute::Type::kFloat2, offsetof(MeshVertex, heatmapWeight), SkString("a_weight")},
-                                    {Attribute::Type::kFloat2, offsetof(MeshVertex, heatmapRadius), SkString("a_radius")}};
+    const Attribute attributes[] = {
+        {Attribute::Type::kFloat2, offsetof(MeshVertex, position), SkString("a_pos")},
+        {Attribute::Type::kFloat2, offsetof(MeshVertex, heatmapWeight), SkString("a_weight")},
+        {Attribute::Type::kFloat2, offsetof(MeshVertex, heatmapRadius), SkString("a_radius")}};
     const Varying varyings[] = {{Varying::Type::kFloat, SkString("weight")},
                                 {Varying::Type::kFloat2, SkString("extrude")},
                                 {Varying::Type::kFloat, SkString("inv_w")}};
@@ -1641,12 +1654,12 @@ sk_sp<SkMeshSpecification> heatmapMeshSpecification() {
     )");
 
     auto [spec, error] = SkMeshSpecification::Make(attributes,
-                                                    sizeof(MeshVertex),
-                                                    varyings,
-                                                    vertexShader,
-                                                    fragmentShader,
-                                                    SkColorSpace::MakeSRGB(),
-                                                    kPremul_SkAlphaType);
+                                                   sizeof(MeshVertex),
+                                                   varyings,
+                                                   vertexShader,
+                                                   fragmentShader,
+                                                   SkColorSpace::MakeSRGB(),
+                                                   kPremul_SkAlphaType);
     (void)error;
     specification = std::move(spec);
     return specification;
@@ -1695,12 +1708,12 @@ sk_sp<SkMeshSpecification> heatmapTextureMeshSpecification() {
     )");
 
     auto [spec, error] = SkMeshSpecification::Make(attributes,
-                                                    sizeof(MeshVertex),
-                                                    varyings,
-                                                    vertexShader,
-                                                    fragmentShader,
-                                                    SkColorSpace::MakeSRGB(),
-                                                    kPremul_SkAlphaType);
+                                                   sizeof(MeshVertex),
+                                                   varyings,
+                                                   vertexShader,
+                                                   fragmentShader,
+                                                   SkColorSpace::MakeSRGB(),
+                                                   kPremul_SkAlphaType);
     (void)error;
     specification = std::move(spec);
     return specification;
@@ -1714,12 +1727,13 @@ sk_sp<SkMeshSpecification> symbolIconMeshSpecification() {
 
     using Attribute = SkMeshSpecification::Attribute;
     using Varying = SkMeshSpecification::Varying;
-    const Attribute attributes[] = {{Attribute::Type::kFloat4, offsetof(MeshVertex, symbolPosOffset), SkString("a_pos_offset")},
-                                    {Attribute::Type::kFloat4, offsetof(MeshVertex, symbolData), SkString("a_data")},
-                                    {Attribute::Type::kFloat4, offsetof(MeshVertex, symbolPixelOffset), SkString("a_pixel_offset")},
-                                    {Attribute::Type::kFloat3, offsetof(MeshVertex, symbolProjectedPos), SkString("a_projected_pos")},
-                                    {Attribute::Type::kFloat, offsetof(MeshVertex, symbolFadeOpacity), SkString("a_fade_opacity")},
-                                    {Attribute::Type::kFloat2, offsetof(MeshVertex, symbolOpacity), SkString("a_opacity")}};
+    const Attribute attributes[] = {
+        {Attribute::Type::kFloat4, offsetof(MeshVertex, symbolPosOffset), SkString("a_pos_offset")},
+        {Attribute::Type::kFloat4, offsetof(MeshVertex, symbolData), SkString("a_data")},
+        {Attribute::Type::kFloat4, offsetof(MeshVertex, symbolPixelOffset), SkString("a_pixel_offset")},
+        {Attribute::Type::kFloat3, offsetof(MeshVertex, symbolProjectedPos), SkString("a_projected_pos")},
+        {Attribute::Type::kFloat, offsetof(MeshVertex, symbolFadeOpacity), SkString("a_fade_opacity")},
+        {Attribute::Type::kFloat2, offsetof(MeshVertex, symbolOpacity), SkString("a_opacity")}};
     const Varying varyings[] = {{Varying::Type::kFloat2, SkString("tex")},
                                 {Varying::Type::kFloat, SkString("opacity")}};
 
@@ -1837,12 +1851,12 @@ sk_sp<SkMeshSpecification> symbolIconMeshSpecification() {
     )");
 
     auto [spec, error] = SkMeshSpecification::Make(attributes,
-                                                    sizeof(MeshVertex),
-                                                    varyings,
-                                                    vertexShader,
-                                                    fragmentShader,
-                                                    SkColorSpace::MakeSRGB(),
-                                                    kPremul_SkAlphaType);
+                                                   sizeof(MeshVertex),
+                                                   varyings,
+                                                   vertexShader,
+                                                   fragmentShader,
+                                                   SkColorSpace::MakeSRGB(),
+                                                   kPremul_SkAlphaType);
     (void)error;
     specification = std::move(spec);
     return specification;
@@ -1856,14 +1870,15 @@ sk_sp<SkMeshSpecification> symbolSDFMeshSpecification() {
 
     using Attribute = SkMeshSpecification::Attribute;
     using Varying = SkMeshSpecification::Varying;
-    const Attribute attributes[] = {{Attribute::Type::kFloat4, offsetof(MeshVertex, symbolPosOffset), SkString("a_pos_offset")},
-                                    {Attribute::Type::kFloat4, offsetof(MeshVertex, symbolData), SkString("a_data")},
-                                    {Attribute::Type::kFloat4, offsetof(MeshVertex, symbolPixelOffset), SkString("a_pixel_offset")},
-                                    {Attribute::Type::kFloat3, offsetof(MeshVertex, symbolProjectedPos), SkString("a_projected_pos")},
-                                    {Attribute::Type::kFloat, offsetof(MeshVertex, symbolFadeOpacity), SkString("a_fade_opacity")},
-                                    {Attribute::Type::kFloat4, offsetof(MeshVertex, symbolFillColor), SkString("a_fill_color")},
-                                    {Attribute::Type::kFloat4, offsetof(MeshVertex, symbolHaloColor), SkString("a_halo_color")},
-                                    {Attribute::Type::kFloat4, offsetof(MeshVertex, symbolHaloWidth), SkString("a_paint")}};
+    const Attribute attributes[] = {
+        {Attribute::Type::kFloat4, offsetof(MeshVertex, symbolPosOffset), SkString("a_pos_offset")},
+        {Attribute::Type::kFloat4, offsetof(MeshVertex, symbolData), SkString("a_data")},
+        {Attribute::Type::kFloat4, offsetof(MeshVertex, symbolPixelOffset), SkString("a_pixel_offset")},
+        {Attribute::Type::kFloat3, offsetof(MeshVertex, symbolProjectedPos), SkString("a_projected_pos")},
+        {Attribute::Type::kFloat, offsetof(MeshVertex, symbolFadeOpacity), SkString("a_fade_opacity")},
+        {Attribute::Type::kFloat4, offsetof(MeshVertex, symbolFillColor), SkString("a_fill_color")},
+        {Attribute::Type::kFloat4, offsetof(MeshVertex, symbolHaloColor), SkString("a_halo_color")},
+        {Attribute::Type::kFloat4, offsetof(MeshVertex, symbolHaloWidth), SkString("a_paint")}};
     const Varying varyings[] = {{Varying::Type::kFloat4, SkString("geometry")},
                                 {Varying::Type::kFloat4, SkString("fill_color")},
                                 {Varying::Type::kFloat4, SkString("halo_color")},
@@ -2005,12 +2020,12 @@ sk_sp<SkMeshSpecification> symbolSDFMeshSpecification() {
     )");
 
     auto [spec, error] = SkMeshSpecification::Make(attributes,
-                                                    sizeof(MeshVertex),
-                                                    varyings,
-                                                    vertexShader,
-                                                    fragmentShader,
-                                                    SkColorSpace::MakeSRGB(),
-                                                    kPremul_SkAlphaType);
+                                                   sizeof(MeshVertex),
+                                                   varyings,
+                                                   vertexShader,
+                                                   fragmentShader,
+                                                   SkColorSpace::MakeSRGB(),
+                                                   kPremul_SkAlphaType);
     (void)error;
     specification = std::move(spec);
     return specification;
@@ -2024,13 +2039,14 @@ sk_sp<SkMeshSpecification> symbolTextAndIconMeshSpecification() {
 
     using Attribute = SkMeshSpecification::Attribute;
     using Varying = SkMeshSpecification::Varying;
-    const Attribute attributes[] = {{Attribute::Type::kFloat4, offsetof(MeshVertex, symbolPosOffset), SkString("a_pos_offset")},
-                                    {Attribute::Type::kFloat4, offsetof(MeshVertex, symbolData), SkString("a_data")},
-                                    {Attribute::Type::kFloat3, offsetof(MeshVertex, symbolProjectedPos), SkString("a_projected_pos")},
-                                    {Attribute::Type::kFloat, offsetof(MeshVertex, symbolFadeOpacity), SkString("a_fade_opacity")},
-                                    {Attribute::Type::kFloat4, offsetof(MeshVertex, symbolFillColor), SkString("a_fill_color")},
-                                    {Attribute::Type::kFloat4, offsetof(MeshVertex, symbolHaloColor), SkString("a_halo_color")},
-                                    {Attribute::Type::kFloat4, offsetof(MeshVertex, symbolHaloWidth), SkString("a_paint")}};
+    const Attribute attributes[] = {
+        {Attribute::Type::kFloat4, offsetof(MeshVertex, symbolPosOffset), SkString("a_pos_offset")},
+        {Attribute::Type::kFloat4, offsetof(MeshVertex, symbolData), SkString("a_data")},
+        {Attribute::Type::kFloat3, offsetof(MeshVertex, symbolProjectedPos), SkString("a_projected_pos")},
+        {Attribute::Type::kFloat, offsetof(MeshVertex, symbolFadeOpacity), SkString("a_fade_opacity")},
+        {Attribute::Type::kFloat4, offsetof(MeshVertex, symbolFillColor), SkString("a_fill_color")},
+        {Attribute::Type::kFloat4, offsetof(MeshVertex, symbolHaloColor), SkString("a_halo_color")},
+        {Attribute::Type::kFloat4, offsetof(MeshVertex, symbolHaloWidth), SkString("a_paint")}};
     const Varying varyings[] = {{Varying::Type::kFloat4, SkString("geometry")},
                                 {Varying::Type::kFloat4, SkString("fill_color")},
                                 {Varying::Type::kFloat4, SkString("halo_color")},
@@ -2179,12 +2195,12 @@ sk_sp<SkMeshSpecification> symbolTextAndIconMeshSpecification() {
     )");
 
     auto [spec, error] = SkMeshSpecification::Make(attributes,
-                                                    sizeof(MeshVertex),
-                                                    varyings,
-                                                    vertexShader,
-                                                    fragmentShader,
-                                                    SkColorSpace::MakeSRGB(),
-                                                    kPremul_SkAlphaType);
+                                                   sizeof(MeshVertex),
+                                                   varyings,
+                                                   vertexShader,
+                                                   fragmentShader,
+                                                   SkColorSpace::MakeSRGB(),
+                                                   kPremul_SkAlphaType);
     (void)error;
     specification = std::move(spec);
     return specification;
@@ -2198,10 +2214,11 @@ sk_sp<SkMeshSpecification> collisionCircleMeshSpecification() {
 
     using Attribute = SkMeshSpecification::Attribute;
     using Varying = SkMeshSpecification::Varying;
-    const Attribute attributes[] = {{Attribute::Type::kFloat2, offsetof(MeshVertex, position), SkString("a_pos")},
-                                    {Attribute::Type::kFloat2, offsetof(MeshVertex, collisionAnchorPos), SkString("a_anchor_pos")},
-                                    {Attribute::Type::kFloat2, offsetof(MeshVertex, collisionExtrude), SkString("a_extrude")},
-                                    {Attribute::Type::kFloat2, offsetof(MeshVertex, collisionPlaced), SkString("a_placed")}};
+    const Attribute attributes[] = {
+        {Attribute::Type::kFloat2, offsetof(MeshVertex, position), SkString("a_pos")},
+        {Attribute::Type::kFloat2, offsetof(MeshVertex, collisionAnchorPos), SkString("a_anchor_pos")},
+        {Attribute::Type::kFloat2, offsetof(MeshVertex, collisionExtrude), SkString("a_extrude")},
+        {Attribute::Type::kFloat2, offsetof(MeshVertex, collisionPlaced), SkString("a_placed")}};
     const Varying varyings[] = {{Varying::Type::kFloat4, SkString("data")},
                                 {Varying::Type::kFloat4, SkString("extrude_data")}};
 
@@ -2263,12 +2280,12 @@ sk_sp<SkMeshSpecification> collisionCircleMeshSpecification() {
     )");
 
     auto [spec, error] = SkMeshSpecification::Make(attributes,
-                                                    sizeof(MeshVertex),
-                                                    varyings,
-                                                    vertexShader,
-                                                    fragmentShader,
-                                                    SkColorSpace::MakeSRGB(),
-                                                    kPremul_SkAlphaType);
+                                                   sizeof(MeshVertex),
+                                                   varyings,
+                                                   vertexShader,
+                                                   fragmentShader,
+                                                   SkColorSpace::MakeSRGB(),
+                                                   kPremul_SkAlphaType);
     (void)error;
     specification = std::move(spec);
     return specification;
@@ -2282,10 +2299,11 @@ sk_sp<SkMeshSpecification> fillPatternMeshSpecification() {
 
     using Attribute = SkMeshSpecification::Attribute;
     using Varying = SkMeshSpecification::Varying;
-    const Attribute attributes[] = {{Attribute::Type::kFloat2, offsetof(MeshVertex, position), SkString("a_pos")},
-                                    {Attribute::Type::kFloat4, offsetof(MeshVertex, color), SkString("a_color")},
-                                    {Attribute::Type::kFloat4, offsetof(MeshVertex, fillPatternFrom), SkString("a_pattern_from")},
-                                    {Attribute::Type::kFloat4, offsetof(MeshVertex, fillPatternTo), SkString("a_pattern_to")}};
+    const Attribute attributes[] = {
+        {Attribute::Type::kFloat2, offsetof(MeshVertex, position), SkString("a_pos")},
+        {Attribute::Type::kFloat4, offsetof(MeshVertex, color), SkString("a_color")},
+        {Attribute::Type::kFloat4, offsetof(MeshVertex, fillPatternFrom), SkString("a_pattern_from")},
+        {Attribute::Type::kFloat4, offsetof(MeshVertex, fillPatternTo), SkString("a_pattern_to")}};
     const Varying varyings[] = {{Varying::Type::kFloat2, SkString("pos_a")},
                                 {Varying::Type::kFloat2, SkString("pos_b")},
                                 {Varying::Type::kFloat4, SkString("pattern_from")},
@@ -2356,12 +2374,12 @@ sk_sp<SkMeshSpecification> fillPatternMeshSpecification() {
     )");
 
     auto [spec, error] = SkMeshSpecification::Make(attributes,
-                                                    sizeof(MeshVertex),
-                                                    varyings,
-                                                    vertexShader,
-                                                    fragmentShader,
-                                                    SkColorSpace::MakeSRGB(),
-                                                    kPremul_SkAlphaType);
+                                                   sizeof(MeshVertex),
+                                                   varyings,
+                                                   vertexShader,
+                                                   fragmentShader,
+                                                   SkColorSpace::MakeSRGB(),
+                                                   kPremul_SkAlphaType);
     (void)error;
     specification = std::move(spec);
     return specification;
@@ -2440,12 +2458,12 @@ sk_sp<SkMeshSpecification> backgroundPatternMeshSpecification() {
     )");
 
     auto [spec, error] = SkMeshSpecification::Make(attributes,
-                                                    sizeof(MeshVertex),
-                                                    varyings,
-                                                    vertexShader,
-                                                    fragmentShader,
-                                                    SkColorSpace::MakeSRGB(),
-                                                    kPremul_SkAlphaType);
+                                                   sizeof(MeshVertex),
+                                                   varyings,
+                                                   vertexShader,
+                                                   fragmentShader,
+                                                   SkColorSpace::MakeSRGB(),
+                                                   kPremul_SkAlphaType);
     (void)error;
     specification = std::move(spec);
     return specification;
@@ -2503,11 +2521,14 @@ SkBlendMode blendModeFor(const gfx::ColorMode& colorMode) {
                 blendMode = SkBlendMode::kSrcOut;
             } else if (src == gfx::ColorBlendFactorType::Zero && dst == gfx::ColorBlendFactorType::OneMinusSrcAlpha) {
                 blendMode = SkBlendMode::kDstOut;
-            } else if (src == gfx::ColorBlendFactorType::DstAlpha && dst == gfx::ColorBlendFactorType::OneMinusSrcAlpha) {
+            } else if (src == gfx::ColorBlendFactorType::DstAlpha &&
+                       dst == gfx::ColorBlendFactorType::OneMinusSrcAlpha) {
                 blendMode = SkBlendMode::kSrcATop;
-            } else if (src == gfx::ColorBlendFactorType::OneMinusDstAlpha && dst == gfx::ColorBlendFactorType::SrcAlpha) {
+            } else if (src == gfx::ColorBlendFactorType::OneMinusDstAlpha &&
+                       dst == gfx::ColorBlendFactorType::SrcAlpha) {
                 blendMode = SkBlendMode::kDstATop;
-            } else if (src == gfx::ColorBlendFactorType::OneMinusDstAlpha && dst == gfx::ColorBlendFactorType::OneMinusSrcAlpha) {
+            } else if (src == gfx::ColorBlendFactorType::OneMinusDstAlpha &&
+                       dst == gfx::ColorBlendFactorType::OneMinusSrcAlpha) {
                 blendMode = SkBlendMode::kXor;
             } else if (src == gfx::ColorBlendFactorType::One && dst == gfx::ColorBlendFactorType::One) {
                 blendMode = SkBlendMode::kPlus;
@@ -2546,8 +2567,8 @@ std::array<float, 2> collisionPointToScreen(const std::array<float, 16>& matrix,
                                             const float cameraToCenterDistance,
                                             const std::array<float, 2>& extrudeScale,
                                             const MeshVertex& vertex) {
-    const auto anchorW = matrix[3] * vertex.collisionAnchorPos[0] +
-                         matrix[7] * vertex.collisionAnchorPos[1] + matrix[15];
+    const auto anchorW = matrix[3] * vertex.collisionAnchorPos[0] + matrix[7] * vertex.collisionAnchorPos[1] +
+                         matrix[15];
     const auto ratio = std::clamp(0.5f + 0.5f * (cameraToCenterDistance / anchorW), 0.0f, 4.0f);
 
     auto clipX = matrix[0] * vertex.position[0] + matrix[4] * vertex.position[1] + matrix[12];
@@ -2731,6 +2752,7 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
     float backgroundPatternScaleB = 1.0f;
     float backgroundPatternMix = 0.0f;
     float backgroundPatternOpacity = 1.0f;
+    float debugOverlayScale = 1.0f;
     const auto& lineImageTexture = getTexture(shaders::idLineImageTexture);
     const auto& fillImageTexture = getTexture(shaders::idFillImageTexture);
     const auto& fillExtrusionImageTexture = getTexture(shaders::idFillExtrusionImageTexture);
@@ -2748,6 +2770,7 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
     const bool lineGradientDrawable = getName().find("lineGradient") != std::string::npos;
     const bool linePatternDrawable = getName().find("linePattern") != std::string::npos;
     const bool lineSDFDrawable = getName().find("lineSDF") != std::string::npos;
+    const bool debugLineDrawable = getName().rfind("debug-", 0) == 0;
     bool hasFillExtrusionPositionAttribute = false;
     bool hasLinePositionAttribute = vertexDataType == gfx::AttributeDataType::Short4;
     bool hasSymbolPositionAttribute = false;
@@ -2763,27 +2786,38 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
             const auto hasLineData = lineDataAttr->getSharedType() == gfx::AttributeDataType::UByte4 ||
                                      lineDataAttr->getDataType() == gfx::AttributeDataType::UByte4;
             const auto hasLinePos = linePosAttr && (linePosAttr->getSharedType() == gfx::AttributeDataType::Short2 ||
-                                                     linePosAttr->getDataType() == gfx::AttributeDataType::Short2 ||
-                                                     linePosAttr->getSharedType() == gfx::AttributeDataType::Short4 ||
-                                                     linePosAttr->getDataType() == gfx::AttributeDataType::Short4);
+                                                    linePosAttr->getDataType() == gfx::AttributeDataType::Short2 ||
+                                                    linePosAttr->getSharedType() == gfx::AttributeDataType::Short4 ||
+                                                    linePosAttr->getDataType() == gfx::AttributeDataType::Short4);
             hasLinePositionAttribute = hasLineData && (hasLinePositionAttribute || hasLinePos);
         }
         if (const auto& symbolDataAttr = attrs->get(shaders::idSymbolDataVertexAttribute)) {
             const auto& symbolPosAttr = attrs->get(shaders::idSymbolPosOffsetVertexAttribute);
             const auto hasSymbolData = symbolDataAttr->getSharedType() == gfx::AttributeDataType::UShort4 ||
                                        symbolDataAttr->getDataType() == gfx::AttributeDataType::UShort4;
-            const auto hasSymbolPos = symbolPosAttr && (symbolPosAttr->getSharedType() == gfx::AttributeDataType::Short4 ||
-                                                        symbolPosAttr->getDataType() == gfx::AttributeDataType::Short4);
+            const auto hasSymbolPos = symbolPosAttr &&
+                                      (symbolPosAttr->getSharedType() == gfx::AttributeDataType::Short4 ||
+                                       symbolPosAttr->getDataType() == gfx::AttributeDataType::Short4);
             hasSymbolPositionAttribute = hasSymbolData && hasSymbolPos;
         }
     }
-    if (getName().find("-collision/") != std::string::npos) {
+    if (debugLineDrawable) {
+        const auto* debugUBO = getUBO<shaders::DebugUBO>(&getUniformBuffers(), shaders::idDebugUBO);
+        if (!debugUBO) {
+            return;
+        }
+        matrix = debugUBO->matrix;
+        color = toRawSkColor(debugUBO->color);
+        debugOverlayScale = debugUBO->overlay_scale;
+    } else if (getName().find("-collision/") != std::string::npos) {
         collisionBoxDrawable = getName().find("/box") != std::string::npos;
         collisionCircleDrawable = getName().find("/circle") != std::string::npos;
-        if (const auto* drawableUBO = getUBO<shaders::CollisionDrawableUBO>(&getUniformBuffers(), shaders::idCollisionDrawableUBO)) {
+        if (const auto* drawableUBO = getUBO<shaders::CollisionDrawableUBO>(&getUniformBuffers(),
+                                                                            shaders::idCollisionDrawableUBO)) {
             matrix = drawableUBO->matrix;
         }
-        if (const auto* tilePropsUBO = getUBO<shaders::CollisionTilePropsUBO>(&getUniformBuffers(), shaders::idCollisionTilePropsUBO)) {
+        if (const auto* tilePropsUBO = getUBO<shaders::CollisionTilePropsUBO>(&getUniformBuffers(),
+                                                                              shaders::idCollisionTilePropsUBO)) {
             collisionExtrudeScale = tilePropsUBO->extrude_scale;
             collisionOverscaleFactor = tilePropsUBO->overscale_factor;
         }
@@ -2809,7 +2843,8 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
             symbolSizeT = drawableUBO->size_t;
             symbolSize = drawableUBO->size;
             symbolOpacityT = drawableUBO->opacity_t;
-            if (const auto* props = getUBO<shaders::SymbolEvaluatedPropsUBO>(layerUniforms, shaders::idSymbolEvaluatedPropsUBO)) {
+            if (const auto* props = getUBO<shaders::SymbolEvaluatedPropsUBO>(layerUniforms,
+                                                                             shaders::idSymbolEvaluatedPropsUBO)) {
                 symbolOpacity = props->icon_opacity;
             }
         }
@@ -2848,7 +2883,8 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
             symbolIsText = tilePropsUBO->is_text ? 1.0f : 0.0f;
             symbolIsHalo = tilePropsUBO->is_halo ? 1.0f : 0.0f;
             symbolGammaScale = tilePropsUBO->gamma_scale;
-            if (const auto* props = getUBO<shaders::SymbolEvaluatedPropsUBO>(layerUniforms, shaders::idSymbolEvaluatedPropsUBO)) {
+            if (const auto* props = getUBO<shaders::SymbolEvaluatedPropsUBO>(layerUniforms,
+                                                                             shaders::idSymbolEvaluatedPropsUBO)) {
                 symbolFillColor = symbolIsText >= 0.5f ? toRawSkColor(props->text_fill_color)
                                                        : toRawSkColor(props->icon_fill_color);
                 symbolHaloColor = symbolIsText >= 0.5f ? toRawSkColor(props->text_halo_color)
@@ -2858,7 +2894,8 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
                 symbolHaloBlur = symbolIsText >= 0.5f ? props->text_halo_blur : props->icon_halo_blur;
             }
         }
-    } else if (getName().find("heatmapTexture") != std::string::npos && heatmapImageTexture && heatmapColorRampTexture) {
+    } else if (getName().find("heatmapTexture") != std::string::npos && heatmapImageTexture &&
+               heatmapColorRampTexture) {
         const auto* props = getUBO<shaders::HeatmapTexturePropsUBO>(layerUniforms, shaders::idHeatmapTexturePropsUBO);
         if (props) {
             heatmapTextureDrawable = true;
@@ -2879,7 +2916,8 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
             heatmapExtrudeScale = drawableUBO->extrude_scale;
             heatmapWeightT = drawableUBO->weight_t;
             heatmapRadiusT = drawableUBO->radius_t;
-            if (const auto* props = getUBO<shaders::HeatmapEvaluatedPropsUBO>(layerUniforms, shaders::idHeatmapEvaluatedPropsUBO)) {
+            if (const auto* props = getUBO<shaders::HeatmapEvaluatedPropsUBO>(layerUniforms,
+                                                                              shaders::idHeatmapEvaluatedPropsUBO)) {
                 heatmapWeight = props->weight;
                 heatmapRadius = props->radius;
                 heatmapIntensity = props->intensity;
@@ -2888,8 +2926,10 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
     } else if (getName().find("hillshadePrepare") != std::string::npos && hillshadeImageTexture) {
         const shaders::HillshadePrepareDrawableUBO* drawableUBO = nullptr;
         const shaders::HillshadePrepareTilePropsUBO* tilePropsUBO = nullptr;
-        drawableUBO = getUBO<shaders::HillshadePrepareDrawableUBO>(&getUniformBuffers(), shaders::idHillshadePrepareDrawableUBO);
-        tilePropsUBO = getUBO<shaders::HillshadePrepareTilePropsUBO>(&getUniformBuffers(), shaders::idHillshadePrepareTilePropsUBO);
+        drawableUBO = getUBO<shaders::HillshadePrepareDrawableUBO>(&getUniformBuffers(),
+                                                                   shaders::idHillshadePrepareDrawableUBO);
+        tilePropsUBO = getUBO<shaders::HillshadePrepareTilePropsUBO>(&getUniformBuffers(),
+                                                                     shaders::idHillshadePrepareTilePropsUBO);
         if (drawableUBO && tilePropsUBO) {
             hillshadePrepareDrawable = true;
             matrix = drawableUBO->matrix;
@@ -2901,14 +2941,17 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
         const shaders::HillshadeDrawableUBO* drawableUBO = nullptr;
         const shaders::HillshadeTilePropsUBO* tilePropsUBO = nullptr;
 #if MLN_UBO_CONSOLIDATION
-        drawableUBO = getUBO<shaders::HillshadeDrawableUBO>(layerUniforms, shaders::idHillshadeDrawableUBO, getUBOIndex());
-        tilePropsUBO = getUBO<shaders::HillshadeTilePropsUBO>(layerUniforms, shaders::idHillshadeTilePropsUBO, getUBOIndex());
+        drawableUBO = getUBO<shaders::HillshadeDrawableUBO>(
+            layerUniforms, shaders::idHillshadeDrawableUBO, getUBOIndex());
+        tilePropsUBO = getUBO<shaders::HillshadeTilePropsUBO>(
+            layerUniforms, shaders::idHillshadeTilePropsUBO, getUBOIndex());
 #endif
         if (!drawableUBO) {
             drawableUBO = getUBO<shaders::HillshadeDrawableUBO>(&getUniformBuffers(), shaders::idHillshadeDrawableUBO);
         }
         if (!tilePropsUBO) {
-            tilePropsUBO = getUBO<shaders::HillshadeTilePropsUBO>(&getUniformBuffers(), shaders::idHillshadeTilePropsUBO);
+            tilePropsUBO = getUBO<shaders::HillshadeTilePropsUBO>(&getUniformBuffers(),
+                                                                  shaders::idHillshadeTilePropsUBO);
         }
         if (drawableUBO && tilePropsUBO) {
             hillshadeDrawable = true;
@@ -2920,8 +2963,8 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
             if (const auto* data = static_cast<const gfx::HillshadePrepareDrawableData*>(getData().get())) {
                 hillshadeUnpack = hillshadeUnpackVector(data->encoding);
                 hillshadeDimension = {static_cast<float>(data->stride), static_cast<float>(data->stride)};
-                hillshadeZoom = static_cast<float>(std::min<int32_t>(getTileID() ? getTileID()->canonical.z : data->maxzoom,
-                                                                     data->maxzoom));
+                hillshadeZoom = static_cast<float>(
+                    std::min<int32_t>(getTileID() ? getTileID()->canonical.z : data->maxzoom, data->maxzoom));
                 hillshadeOverzoom = parameters.state.getZoom() > static_cast<double>(data->maxzoom);
             } else {
                 hillshadePrepared = 1;
@@ -2929,7 +2972,8 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
             if (getTileID() && !getData()) {
                 hillshadeZoom = static_cast<float>(getTileID()->canonical.z);
             }
-            if (const auto* props = getUBO<shaders::HillshadeEvaluatedPropsUBO>(layerUniforms, shaders::idHillshadeEvaluatedPropsUBO)) {
+            if (const auto* props = getUBO<shaders::HillshadeEvaluatedPropsUBO>(
+                    layerUniforms, shaders::idHillshadeEvaluatedPropsUBO)) {
                 hillshadeAccent = {props->accent.r, props->accent.g, props->accent.b, props->accent.a};
                 hillshadeAltitudes = props->altitudes;
                 hillshadeAzimuths = props->azimuths;
@@ -2937,7 +2981,8 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
                 hillshadeHighlights = props->highlights;
             }
         }
-    } else if (getName().find("colorRelief") != std::string::npos && !hasLinePositionAttribute && colorReliefImageTexture) {
+    } else if (getName().find("colorRelief") != std::string::npos && !hasLinePositionAttribute &&
+               colorReliefImageTexture) {
         const shaders::ColorReliefDrawableUBO* drawableUBO = nullptr;
         const shaders::ColorReliefTilePropsUBO* tilePropsUBO = nullptr;
 #if MLN_UBO_CONSOLIDATION
@@ -2947,10 +2992,12 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
             layerUniforms, shaders::idColorReliefTilePropsUBO, getUBOIndex());
 #endif
         if (!drawableUBO) {
-            drawableUBO = getUBO<shaders::ColorReliefDrawableUBO>(&getUniformBuffers(), shaders::idColorReliefDrawableUBO);
+            drawableUBO = getUBO<shaders::ColorReliefDrawableUBO>(&getUniformBuffers(),
+                                                                  shaders::idColorReliefDrawableUBO);
         }
         if (!tilePropsUBO) {
-            tilePropsUBO = getUBO<shaders::ColorReliefTilePropsUBO>(&getUniformBuffers(), shaders::idColorReliefTilePropsUBO);
+            tilePropsUBO = getUBO<shaders::ColorReliefTilePropsUBO>(&getUniformBuffers(),
+                                                                    shaders::idColorReliefTilePropsUBO);
         }
         if (drawableUBO && tilePropsUBO) {
             colorReliefDrawable = true;
@@ -2958,7 +3005,8 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
             colorReliefUnpack = tilePropsUBO->unpack;
             colorReliefDimension = tilePropsUBO->dimension;
             colorReliefRampSize = tilePropsUBO->color_ramp_size;
-            if (const auto* props = getUBO<shaders::ColorReliefEvaluatedPropsUBO>(layerUniforms, shaders::idColorReliefEvaluatedPropsUBO)) {
+            if (const auto* props = getUBO<shaders::ColorReliefEvaluatedPropsUBO>(
+                    layerUniforms, shaders::idColorReliefEvaluatedPropsUBO)) {
                 colorReliefOpacity = props->opacity;
             }
         }
@@ -2972,7 +3020,8 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
             layerUniforms, shaders::idFillExtrusionDrawableUBO, getUBOIndex());
 #endif
         if (!extrusionDrawableUBO) {
-            extrusionDrawableUBO = getUBO<shaders::FillExtrusionDrawableUBO>(&getUniformBuffers(), shaders::idFillExtrusionDrawableUBO);
+            extrusionDrawableUBO = getUBO<shaders::FillExtrusionDrawableUBO>(&getUniformBuffers(),
+                                                                             shaders::idFillExtrusionDrawableUBO);
         }
         if (extrusionDrawableUBO) {
             fillExtrusionDrawable = true;
@@ -2985,7 +3034,8 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
             fillExtrusionBaseT = extrusionDrawableUBO->base_t;
             fillExtrusionHeightT = extrusionDrawableUBO->height_t;
             colorT = extrusionDrawableUBO->color_t;
-            if (const auto* props = getUBO<shaders::FillExtrusionPropsUBO>(layerUniforms, shaders::idFillExtrusionPropsUBO)) {
+            if (const auto* props = getUBO<shaders::FillExtrusionPropsUBO>(layerUniforms,
+                                                                           shaders::idFillExtrusionPropsUBO)) {
                 color = toRawSkColor(props->color);
                 fillExtrusionBase = props->base;
                 fillExtrusionHeight = props->height;
@@ -3002,7 +3052,8 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
                 const auto* tileProps = getUBO<shaders::FillExtrusionTilePropsUBO>(
                     layerUniforms, shaders::idFillExtrusionTilePropsUBO, getUBOIndex());
                 if (!tileProps) {
-                    tileProps = getUBO<shaders::FillExtrusionTilePropsUBO>(&getUniformBuffers(), shaders::idFillExtrusionTilePropsUBO);
+                    tileProps = getUBO<shaders::FillExtrusionTilePropsUBO>(&getUniformBuffers(),
+                                                                           shaders::idFillExtrusionTilePropsUBO);
                 }
                 if (tileProps) {
                     fillPatternFrom = tileProps->pattern_from;
@@ -3014,7 +3065,8 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
     } else if (getName().find("raster") != std::string::npos) {
         const shaders::RasterDrawableUBO* rasterDrawableUBO = nullptr;
 #if MLN_UBO_CONSOLIDATION
-        rasterDrawableUBO = getUBO<shaders::RasterDrawableUBO>(layerUniforms, shaders::idRasterDrawableUBO, getUBOIndex());
+        rasterDrawableUBO = getUBO<shaders::RasterDrawableUBO>(
+            layerUniforms, shaders::idRasterDrawableUBO, getUBOIndex());
 #endif
         if (!rasterDrawableUBO) {
             rasterDrawableUBO = getUBO<shaders::RasterDrawableUBO>(&getUniformBuffers(), shaders::idRasterDrawableUBO);
@@ -3022,7 +3074,8 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
         if (rasterDrawableUBO) {
             rasterDrawable = true;
             matrix = rasterDrawableUBO->matrix;
-            if (const auto* props = getUBO<shaders::RasterEvaluatedPropsUBO>(layerUniforms, shaders::idRasterEvaluatedPropsUBO)) {
+            if (const auto* props = getUBO<shaders::RasterEvaluatedPropsUBO>(layerUniforms,
+                                                                             shaders::idRasterEvaluatedPropsUBO)) {
                 rasterSpinWeights = props->spin_weights;
                 rasterTlParent = props->tl_parent;
                 rasterScaleParent = props->scale_parent;
@@ -3038,7 +3091,8 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
     } else if (getName().find("circle") != std::string::npos) {
         const shaders::CircleDrawableUBO* circleDrawableUBO = nullptr;
 #if MLN_UBO_CONSOLIDATION
-        circleDrawableUBO = getUBO<shaders::CircleDrawableUBO>(layerUniforms, shaders::idCircleDrawableUBO, getUBOIndex());
+        circleDrawableUBO = getUBO<shaders::CircleDrawableUBO>(
+            layerUniforms, shaders::idCircleDrawableUBO, getUBOIndex());
 #endif
         if (!circleDrawableUBO) {
             circleDrawableUBO = getUBO<shaders::CircleDrawableUBO>(&getUniformBuffers(), shaders::idCircleDrawableUBO);
@@ -3054,7 +3108,8 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
             circleStrokeColorT = circleDrawableUBO->stroke_color_t;
             circleStrokeWidthT = circleDrawableUBO->stroke_width_t;
             circleStrokeOpacityT = circleDrawableUBO->stroke_opacity_t;
-            if (const auto* props = getUBO<shaders::CircleEvaluatedPropsUBO>(layerUniforms, shaders::idCircleEvaluatedPropsUBO)) {
+            if (const auto* props = getUBO<shaders::CircleEvaluatedPropsUBO>(layerUniforms,
+                                                                             shaders::idCircleEvaluatedPropsUBO)) {
                 circleColor = toRawSkColor(props->color);
                 circleStrokeColor = toRawSkColor(props->stroke_color);
                 circleRadius = props->radius;
@@ -3074,12 +3129,14 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
         if (isFillOutlineTriangulated) {
             const shaders::FillOutlineTriangulatedDrawableUBO* outlineTriangulatedUBO = nullptr;
 #if MLN_UBO_CONSOLIDATION
-            if (const auto* fillDrawableUnion = getUBO<shaders::FillDrawableUnionUBO>(layerUniforms, shaders::idFillDrawableUBO, getUBOIndex())) {
+            if (const auto* fillDrawableUnion = getUBO<shaders::FillDrawableUnionUBO>(
+                    layerUniforms, shaders::idFillDrawableUBO, getUBOIndex())) {
                 outlineTriangulatedUBO = &fillDrawableUnion->fillOutlineTriangulatedDrawableUBO;
             }
 #endif
             if (!outlineTriangulatedUBO) {
-                outlineTriangulatedUBO = getUBO<shaders::FillOutlineTriangulatedDrawableUBO>(&getUniformBuffers(), shaders::idFillDrawableUBO);
+                outlineTriangulatedUBO = getUBO<shaders::FillOutlineTriangulatedDrawableUBO>(
+                    &getUniformBuffers(), shaders::idFillDrawableUBO);
             }
             if (outlineTriangulatedUBO) {
                 gradientAsLineDrawableUBO.matrix = outlineTriangulatedUBO->matrix;
@@ -3096,47 +3153,48 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
         if (!lineDrawableUBO) {
             if (const auto* lineDrawableUnion = getUBO<shaders::LineDrawableUnionUBO>(
                     layerUniforms, shaders::idLineDrawableUBO, getUBOIndex())) {
-            if (lineGradientDrawable) {
-                const auto& gradientUBO = lineDrawableUnion->lineGradientDrawableUBO;
-                gradientAsLineDrawableUBO.matrix = gradientUBO.matrix;
-                gradientAsLineDrawableUBO.ratio = gradientUBO.ratio;
-                gradientAsLineDrawableUBO.blur_t = gradientUBO.blur_t;
-                gradientAsLineDrawableUBO.opacity_t = gradientUBO.opacity_t;
-                gradientAsLineDrawableUBO.gapwidth_t = gradientUBO.gapwidth_t;
-                gradientAsLineDrawableUBO.offset_t = gradientUBO.offset_t;
-                gradientAsLineDrawableUBO.width_t = gradientUBO.width_t;
-                lineDrawableUBO = &gradientAsLineDrawableUBO;
-            } else if (linePatternDrawable) {
-                const auto& patternUBO = lineDrawableUnion->linePatternDrawableUBO;
-                gradientAsLineDrawableUBO.matrix = patternUBO.matrix;
-                gradientAsLineDrawableUBO.ratio = patternUBO.ratio;
-                gradientAsLineDrawableUBO.blur_t = patternUBO.blur_t;
-                gradientAsLineDrawableUBO.opacity_t = patternUBO.opacity_t;
-                gradientAsLineDrawableUBO.gapwidth_t = patternUBO.gapwidth_t;
-                gradientAsLineDrawableUBO.offset_t = patternUBO.offset_t;
-                gradientAsLineDrawableUBO.width_t = patternUBO.width_t;
-                lineDrawableUBO = &gradientAsLineDrawableUBO;
-            } else if (lineSDFDrawable) {
-                const auto& sdfUBO = lineDrawableUnion->lineSDFDrawableUBO;
-                gradientAsLineDrawableUBO.matrix = sdfUBO.matrix;
-                gradientAsLineDrawableUBO.ratio = sdfUBO.ratio;
-                gradientAsLineDrawableUBO.color_t = sdfUBO.color_t;
-                gradientAsLineDrawableUBO.blur_t = sdfUBO.blur_t;
-                gradientAsLineDrawableUBO.opacity_t = sdfUBO.opacity_t;
-                gradientAsLineDrawableUBO.gapwidth_t = sdfUBO.gapwidth_t;
-                gradientAsLineDrawableUBO.offset_t = sdfUBO.offset_t;
-                gradientAsLineDrawableUBO.width_t = sdfUBO.width_t;
-                lineFloorWidthT = sdfUBO.floorwidth_t;
-                lineDrawableUBO = &gradientAsLineDrawableUBO;
-            } else {
-                lineDrawableUBO = &lineDrawableUnion->lineDrawableUBO;
-            }
+                if (lineGradientDrawable) {
+                    const auto& gradientUBO = lineDrawableUnion->lineGradientDrawableUBO;
+                    gradientAsLineDrawableUBO.matrix = gradientUBO.matrix;
+                    gradientAsLineDrawableUBO.ratio = gradientUBO.ratio;
+                    gradientAsLineDrawableUBO.blur_t = gradientUBO.blur_t;
+                    gradientAsLineDrawableUBO.opacity_t = gradientUBO.opacity_t;
+                    gradientAsLineDrawableUBO.gapwidth_t = gradientUBO.gapwidth_t;
+                    gradientAsLineDrawableUBO.offset_t = gradientUBO.offset_t;
+                    gradientAsLineDrawableUBO.width_t = gradientUBO.width_t;
+                    lineDrawableUBO = &gradientAsLineDrawableUBO;
+                } else if (linePatternDrawable) {
+                    const auto& patternUBO = lineDrawableUnion->linePatternDrawableUBO;
+                    gradientAsLineDrawableUBO.matrix = patternUBO.matrix;
+                    gradientAsLineDrawableUBO.ratio = patternUBO.ratio;
+                    gradientAsLineDrawableUBO.blur_t = patternUBO.blur_t;
+                    gradientAsLineDrawableUBO.opacity_t = patternUBO.opacity_t;
+                    gradientAsLineDrawableUBO.gapwidth_t = patternUBO.gapwidth_t;
+                    gradientAsLineDrawableUBO.offset_t = patternUBO.offset_t;
+                    gradientAsLineDrawableUBO.width_t = patternUBO.width_t;
+                    lineDrawableUBO = &gradientAsLineDrawableUBO;
+                } else if (lineSDFDrawable) {
+                    const auto& sdfUBO = lineDrawableUnion->lineSDFDrawableUBO;
+                    gradientAsLineDrawableUBO.matrix = sdfUBO.matrix;
+                    gradientAsLineDrawableUBO.ratio = sdfUBO.ratio;
+                    gradientAsLineDrawableUBO.color_t = sdfUBO.color_t;
+                    gradientAsLineDrawableUBO.blur_t = sdfUBO.blur_t;
+                    gradientAsLineDrawableUBO.opacity_t = sdfUBO.opacity_t;
+                    gradientAsLineDrawableUBO.gapwidth_t = sdfUBO.gapwidth_t;
+                    gradientAsLineDrawableUBO.offset_t = sdfUBO.offset_t;
+                    gradientAsLineDrawableUBO.width_t = sdfUBO.width_t;
+                    lineFloorWidthT = sdfUBO.floorwidth_t;
+                    lineDrawableUBO = &gradientAsLineDrawableUBO;
+                } else {
+                    lineDrawableUBO = &lineDrawableUnion->lineDrawableUBO;
+                }
             }
         }
 #endif
         if (!lineDrawableUBO) {
             if (lineGradientDrawable) {
-                if (const auto* gradientUBO = getUBO<shaders::LineGradientDrawableUBO>(&getUniformBuffers(), shaders::idLineDrawableUBO)) {
+                if (const auto* gradientUBO = getUBO<shaders::LineGradientDrawableUBO>(&getUniformBuffers(),
+                                                                                       shaders::idLineDrawableUBO)) {
                     gradientAsLineDrawableUBO.matrix = gradientUBO->matrix;
                     gradientAsLineDrawableUBO.ratio = gradientUBO->ratio;
                     gradientAsLineDrawableUBO.blur_t = gradientUBO->blur_t;
@@ -3147,7 +3205,8 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
                     lineDrawableUBO = &gradientAsLineDrawableUBO;
                 }
             } else if (linePatternDrawable) {
-                if (const auto* patternUBO = getUBO<shaders::LinePatternDrawableUBO>(&getUniformBuffers(), shaders::idLineDrawableUBO)) {
+                if (const auto* patternUBO = getUBO<shaders::LinePatternDrawableUBO>(&getUniformBuffers(),
+                                                                                     shaders::idLineDrawableUBO)) {
                     gradientAsLineDrawableUBO.matrix = patternUBO->matrix;
                     gradientAsLineDrawableUBO.ratio = patternUBO->ratio;
                     gradientAsLineDrawableUBO.blur_t = patternUBO->blur_t;
@@ -3158,7 +3217,8 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
                     lineDrawableUBO = &gradientAsLineDrawableUBO;
                 }
             } else if (lineSDFDrawable) {
-                if (const auto* sdfUBO = getUBO<shaders::LineSDFDrawableUBO>(&getUniformBuffers(), shaders::idLineDrawableUBO)) {
+                if (const auto* sdfUBO = getUBO<shaders::LineSDFDrawableUBO>(&getUniformBuffers(),
+                                                                             shaders::idLineDrawableUBO)) {
                     gradientAsLineDrawableUBO.matrix = sdfUBO->matrix;
                     gradientAsLineDrawableUBO.ratio = sdfUBO->ratio;
                     gradientAsLineDrawableUBO.color_t = sdfUBO->color_t;
@@ -3186,7 +3246,8 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
             lineRatio = lineDrawableUBO->ratio;
             if (isFillOutlineTriangulated) {
                 color = SkColor4f{0.0f, 0.0f, 0.0f, 1.0f};
-                if (const auto* props = getUBO<shaders::FillEvaluatedPropsUBO>(layerUniforms, shaders::idFillEvaluatedPropsUBO)) {
+                if (const auto* props = getUBO<shaders::FillEvaluatedPropsUBO>(layerUniforms,
+                                                                               shaders::idFillEvaluatedPropsUBO)) {
                     color = toSkColor(props->outline_color, props->opacity);
                 }
                 lineBlur = 0.0f;
@@ -3194,7 +3255,8 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
                 lineWidth = 1.0f;
                 lineGapWidth = 0.0f;
                 lineFloorWidth = 1.0f;
-            } else if (const auto* props = getUBO<shaders::LineEvaluatedPropsUBO>(layerUniforms, shaders::idLineEvaluatedPropsUBO)) {
+            } else if (const auto* props = getUBO<shaders::LineEvaluatedPropsUBO>(layerUniforms,
+                                                                                  shaders::idLineEvaluatedPropsUBO)) {
                 color = (lineGradientDrawable || linePatternDrawable) ? SkColor4f{1.0f, 1.0f, 1.0f, props->opacity}
                                                                       : toSkColor(props->color, props->opacity);
                 lineBlur = props->blur;
@@ -3212,7 +3274,8 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
                 }
 #endif
                 if (!tileProps) {
-                    tileProps = getUBO<shaders::LinePatternTilePropsUBO>(&getUniformBuffers(), shaders::idLineTilePropsUBO);
+                    tileProps = getUBO<shaders::LinePatternTilePropsUBO>(&getUniformBuffers(),
+                                                                         shaders::idLineTilePropsUBO);
                 }
                 if (tileProps) {
                     fillPatternFrom = tileProps->pattern_from;
@@ -3223,12 +3286,14 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
     } else if (getName().find("fill-outline-pattern") != std::string::npos) {
         const shaders::FillOutlinePatternDrawableUBO* patternDrawableUBO = nullptr;
 #if MLN_UBO_CONSOLIDATION
-        if (const auto* fillDrawableUnion = getUBO<shaders::FillDrawableUnionUBO>(layerUniforms, shaders::idFillDrawableUBO, getUBOIndex())) {
+        if (const auto* fillDrawableUnion = getUBO<shaders::FillDrawableUnionUBO>(
+                layerUniforms, shaders::idFillDrawableUBO, getUBOIndex())) {
             patternDrawableUBO = &fillDrawableUnion->fillOutlinePatternDrawableUBO;
         }
 #endif
         if (!patternDrawableUBO) {
-            patternDrawableUBO = getUBO<shaders::FillOutlinePatternDrawableUBO>(&getUniformBuffers(), shaders::idFillDrawableUBO);
+            patternDrawableUBO = getUBO<shaders::FillOutlinePatternDrawableUBO>(&getUniformBuffers(),
+                                                                                shaders::idFillDrawableUBO);
         }
         if (patternDrawableUBO) {
             fillOutlinePatternDrawable = true;
@@ -3237,7 +3302,8 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
             fillPatternPixelCoordLower = patternDrawableUBO->pixel_coord_lower;
             fillPatternTileRatio = patternDrawableUBO->tile_ratio;
             opacityT = patternDrawableUBO->opacity_t;
-            if (const auto* props = getUBO<shaders::FillEvaluatedPropsUBO>(layerUniforms, shaders::idFillEvaluatedPropsUBO)) {
+            if (const auto* props = getUBO<shaders::FillEvaluatedPropsUBO>(layerUniforms,
+                                                                           shaders::idFillEvaluatedPropsUBO)) {
                 color = SkColor4f{1.0f, 1.0f, 1.0f, props->opacity};
                 fillPatternFade = props->fade;
                 fillPatternFromScale = props->from_scale;
@@ -3245,12 +3311,14 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
             }
             const shaders::FillOutlinePatternTilePropsUBO* tileProps = nullptr;
 #if MLN_UBO_CONSOLIDATION
-            if (const auto* fillTilePropsUnion = getUBO<shaders::FillTilePropsUnionUBO>(layerUniforms, shaders::idFillTilePropsUBO, getUBOIndex())) {
+            if (const auto* fillTilePropsUnion = getUBO<shaders::FillTilePropsUnionUBO>(
+                    layerUniforms, shaders::idFillTilePropsUBO, getUBOIndex())) {
                 tileProps = &fillTilePropsUnion->fillOutlinePatternTilePropsUBO;
             }
 #endif
             if (!tileProps) {
-                tileProps = getUBO<shaders::FillOutlinePatternTilePropsUBO>(&getUniformBuffers(), shaders::idFillTilePropsUBO);
+                tileProps = getUBO<shaders::FillOutlinePatternTilePropsUBO>(&getUniformBuffers(),
+                                                                            shaders::idFillTilePropsUBO);
             }
             if (tileProps) {
                 fillPatternFrom = tileProps->pattern_from;
@@ -3261,12 +3329,14 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
     } else if (getName().find("fill-pattern") != std::string::npos) {
         const shaders::FillPatternDrawableUBO* patternDrawableUBO = nullptr;
 #if MLN_UBO_CONSOLIDATION
-        if (const auto* fillDrawableUnion = getUBO<shaders::FillDrawableUnionUBO>(layerUniforms, shaders::idFillDrawableUBO, getUBOIndex())) {
+        if (const auto* fillDrawableUnion = getUBO<shaders::FillDrawableUnionUBO>(
+                layerUniforms, shaders::idFillDrawableUBO, getUBOIndex())) {
             patternDrawableUBO = &fillDrawableUnion->fillPatternDrawableUBO;
         }
 #endif
         if (!patternDrawableUBO) {
-            patternDrawableUBO = getUBO<shaders::FillPatternDrawableUBO>(&getUniformBuffers(), shaders::idFillDrawableUBO);
+            patternDrawableUBO = getUBO<shaders::FillPatternDrawableUBO>(&getUniformBuffers(),
+                                                                         shaders::idFillDrawableUBO);
         }
         if (patternDrawableUBO) {
             fillPatternDrawable = true;
@@ -3275,7 +3345,8 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
             fillPatternPixelCoordLower = patternDrawableUBO->pixel_coord_lower;
             fillPatternTileRatio = patternDrawableUBO->tile_ratio;
             opacityT = patternDrawableUBO->opacity_t;
-            if (const auto* props = getUBO<shaders::FillEvaluatedPropsUBO>(layerUniforms, shaders::idFillEvaluatedPropsUBO)) {
+            if (const auto* props = getUBO<shaders::FillEvaluatedPropsUBO>(layerUniforms,
+                                                                           shaders::idFillEvaluatedPropsUBO)) {
                 color = SkColor4f{1.0f, 1.0f, 1.0f, props->opacity};
                 fillPatternFade = props->fade;
                 fillPatternFromScale = props->from_scale;
@@ -3283,7 +3354,8 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
             }
             const shaders::FillPatternTilePropsUBO* tileProps = nullptr;
 #if MLN_UBO_CONSOLIDATION
-            if (const auto* fillTilePropsUnion = getUBO<shaders::FillTilePropsUnionUBO>(layerUniforms, shaders::idFillTilePropsUBO, getUBOIndex())) {
+            if (const auto* fillTilePropsUnion = getUBO<shaders::FillTilePropsUnionUBO>(
+                    layerUniforms, shaders::idFillTilePropsUBO, getUBOIndex())) {
                 tileProps = &fillTilePropsUnion->fillPatternTilePropsUBO;
             }
 #endif
@@ -3299,12 +3371,14 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
     } else if (backgroundImageTexture) {
         const shaders::BackgroundPatternDrawableUBO* patternDrawableUBO = nullptr;
 #if MLN_UBO_CONSOLIDATION
-        if (const auto* backgroundDrawableUnion = getUBO<shaders::BackgroundDrawableUnionUBO>(layerUniforms, shaders::idBackgroundDrawableUBO, getUBOIndex())) {
+        if (const auto* backgroundDrawableUnion = getUBO<shaders::BackgroundDrawableUnionUBO>(
+                layerUniforms, shaders::idBackgroundDrawableUBO, getUBOIndex())) {
             patternDrawableUBO = &backgroundDrawableUnion->backgroundPatternDrawableUBO;
         }
 #endif
         if (!patternDrawableUBO) {
-            patternDrawableUBO = getUBO<shaders::BackgroundPatternDrawableUBO>(&getUniformBuffers(), shaders::idBackgroundDrawableUBO);
+            patternDrawableUBO = getUBO<shaders::BackgroundPatternDrawableUBO>(&getUniformBuffers(),
+                                                                               shaders::idBackgroundDrawableUBO);
         }
         if (patternDrawableUBO) {
             backgroundPatternDrawable = true;
@@ -3312,7 +3386,8 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
             backgroundPatternPixelCoordUpper = patternDrawableUBO->pixel_coord_upper;
             backgroundPatternPixelCoordLower = patternDrawableUBO->pixel_coord_lower;
             backgroundPatternTileUnitsToPixels = patternDrawableUBO->tile_units_to_pixels;
-            if (const auto* props = getUBO<shaders::BackgroundPatternPropsUBO>(layerUniforms, shaders::idBackgroundPropsUBO)) {
+            if (const auto* props = getUBO<shaders::BackgroundPatternPropsUBO>(layerUniforms,
+                                                                               shaders::idBackgroundPropsUBO)) {
                 backgroundPatternTlA = props->pattern_tl_a;
                 backgroundPatternBrA = props->pattern_br_a;
                 backgroundPatternTlB = props->pattern_tl_b;
@@ -3328,32 +3403,37 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
     } else if (getName().find("fill-outline") != std::string::npos && getName().find("pattern") == std::string::npos) {
         const shaders::FillOutlineDrawableUBO* outlineDrawableUBO = nullptr;
 #if MLN_UBO_CONSOLIDATION
-        if (const auto* fillDrawableUnion = getUBO<shaders::FillDrawableUnionUBO>(layerUniforms, shaders::idFillDrawableUBO, getUBOIndex())) {
+        if (const auto* fillDrawableUnion = getUBO<shaders::FillDrawableUnionUBO>(
+                layerUniforms, shaders::idFillDrawableUBO, getUBOIndex())) {
             outlineDrawableUBO = &fillDrawableUnion->fillOutlineDrawableUBO;
         }
 #endif
         if (!outlineDrawableUBO) {
-            outlineDrawableUBO = getUBO<shaders::FillOutlineDrawableUBO>(&getUniformBuffers(), shaders::idFillDrawableUBO);
+            outlineDrawableUBO = getUBO<shaders::FillOutlineDrawableUBO>(&getUniformBuffers(),
+                                                                         shaders::idFillDrawableUBO);
         }
         if (outlineDrawableUBO) {
             fillOutlineDrawable = true;
             matrix = outlineDrawableUBO->matrix;
             colorT = outlineDrawableUBO->outline_color_t;
             opacityT = outlineDrawableUBO->opacity_t;
-            if (const auto* props = getUBO<shaders::FillEvaluatedPropsUBO>(layerUniforms, shaders::idFillEvaluatedPropsUBO)) {
+            if (const auto* props = getUBO<shaders::FillEvaluatedPropsUBO>(layerUniforms,
+                                                                           shaders::idFillEvaluatedPropsUBO)) {
                 color = toRawSkColor(props->outline_color);
                 color.fA *= props->opacity;
             }
         }
-    } else if (const auto* drawableUBO = getUBO<shaders::FillDrawableUBO>(&getUniformBuffers(), shaders::idFillDrawableUBO)) {
+    } else if (const auto* drawableUBO = getUBO<shaders::FillDrawableUBO>(&getUniformBuffers(),
+                                                                          shaders::idFillDrawableUBO)) {
         matrix = drawableUBO->matrix;
         colorT = drawableUBO->color_t;
         opacityT = drawableUBO->opacity_t;
-        if (const auto* props = getUBO<shaders::FillEvaluatedPropsUBO>(layerUniforms, shaders::idFillEvaluatedPropsUBO)) {
+        if (const auto* props = getUBO<shaders::FillEvaluatedPropsUBO>(layerUniforms,
+                                                                       shaders::idFillEvaluatedPropsUBO)) {
             color = toSkColor(props->color, props->opacity);
         }
-    } else if (const auto* backgroundDrawableUBO = getUBO<shaders::BackgroundDrawableUBO>(&getUniformBuffers(),
-                                                                                           shaders::idBackgroundDrawableUBO)) {
+    } else if (const auto* backgroundDrawableUBO = getUBO<shaders::BackgroundDrawableUBO>(
+                   &getUniformBuffers(), shaders::idBackgroundDrawableUBO)) {
         matrix = backgroundDrawableUBO->matrix;
         if (const auto* props = getUBO<shaders::BackgroundPropsUBO>(layerUniforms, shaders::idBackgroundPropsUBO)) {
             color = toSkColor(props->color, props->opacity);
@@ -3364,25 +3444,45 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
     if (!vertices.empty() && vertexDataType == gfx::AttributeDataType::Short2) {
         vertexReader = VertexReader{vertices.data(), vertexCount, sizeof(std::int16_t) * 2};
     } else if (const auto& attrs = getVertexAttributes()) {
-        const std::size_t fallbackPositionAttributeId = (heatmapDrawable || heatmapTextureDrawable) ? static_cast<std::size_t>(shaders::idHeatmapPosVertexAttribute)
-                                                        : ((hillshadePrepareDrawable || hillshadeDrawable) ? static_cast<std::size_t>(shaders::idHillshadePosVertexAttribute)
-                                                        : (colorReliefDrawable ? static_cast<std::size_t>(shaders::idColorReliefPosVertexAttribute)
-                                                          : (fillExtrusionDrawable ? static_cast<std::size_t>(shaders::idFillExtrusionPosVertexAttribute)
-                                                          : ((collisionBoxDrawable || collisionCircleDrawable) ? static_cast<std::size_t>(shaders::idCollisionPosVertexAttribute)
-                                                        : ((symbolIconDrawable || symbolSDFDrawable || symbolTextAndIconDrawable) ? static_cast<std::size_t>(shaders::idSymbolPosOffsetVertexAttribute)
-                                                          : (rasterDrawable ? static_cast<std::size_t>(shaders::idRasterPosVertexAttribute) : (circleDrawable ? static_cast<std::size_t>(shaders::idCirclePosVertexAttribute) : (lineDrawable
-                                                                                                                                                             ? static_cast<std::size_t>(shaders::idLinePosNormalVertexAttribute)
-                                                                                                                                                             : static_cast<std::size_t>(shaders::idFillPosVertexAttribute)))))))));
+        const std::size_t fallbackPositionAttributeId =
+            (heatmapDrawable || heatmapTextureDrawable)
+                ? static_cast<std::size_t>(shaders::idHeatmapPosVertexAttribute)
+                : ((hillshadePrepareDrawable || hillshadeDrawable)
+                       ? static_cast<std::size_t>(shaders::idHillshadePosVertexAttribute)
+                       : (colorReliefDrawable
+                              ? static_cast<std::size_t>(shaders::idColorReliefPosVertexAttribute)
+                              : (fillExtrusionDrawable
+                                     ? static_cast<std::size_t>(shaders::idFillExtrusionPosVertexAttribute)
+                                     : ((collisionBoxDrawable || collisionCircleDrawable)
+                                            ? static_cast<std::size_t>(shaders::idCollisionPosVertexAttribute)
+                                            : ((symbolIconDrawable || symbolSDFDrawable || symbolTextAndIconDrawable)
+                                                   ? static_cast<std::size_t>(shaders::idSymbolPosOffsetVertexAttribute)
+                                                   : (rasterDrawable
+                                                          ? static_cast<std::size_t>(
+                                                                shaders::idRasterPosVertexAttribute)
+                                                          : (circleDrawable
+                                                                 ? static_cast<std::size_t>(
+                                                                       shaders::idCirclePosVertexAttribute)
+                                                                 : (lineDrawable
+                                                                        ? static_cast<std::size_t>(
+                                                                              shaders::idLinePosNormalVertexAttribute)
+                                                                        : static_cast<std::size_t>(
+                                                                              shaders::
+                                                                                  idFillPosVertexAttribute)))))))));
         const auto& attr = attrs->get(positionAttributeId) ? attrs->get(positionAttributeId)
                                                            : attrs->get(fallbackPositionAttributeId);
-        if (attr && attr->getSharedRawData() && (attr->getSharedType() == gfx::AttributeDataType::Short2 ||
-                                                attr->getSharedType() == gfx::AttributeDataType::Short4)) {
+        if (attr && attr->getSharedRawData() &&
+            (attr->getSharedType() == gfx::AttributeDataType::Short2 ||
+             attr->getSharedType() == gfx::AttributeDataType::Short4)) {
             const auto* raw = static_cast<const std::uint8_t*>(attr->getSharedRawData()->getRawData());
-            vertexReader = VertexReader{raw + attr->getSharedOffset() + attr->getSharedVertexOffset() * attr->getSharedStride(),
-                                        vertexCount ? vertexCount : attr->getSharedRawData()->getRawCount(),
-                                        attr->getSharedStride()};
-        } else if (attr && (attr->getDataType() == gfx::AttributeDataType::Short2 ||
-                            attr->getDataType() == gfx::AttributeDataType::Short4) && !attr->getRawData().empty()) {
+            vertexReader = VertexReader{
+                raw + attr->getSharedOffset() + attr->getSharedVertexOffset() * attr->getSharedStride(),
+                vertexCount ? vertexCount : attr->getSharedRawData()->getRawCount(),
+                attr->getSharedStride()};
+        } else if (attr &&
+                   (attr->getDataType() == gfx::AttributeDataType::Short2 ||
+                    attr->getDataType() == gfx::AttributeDataType::Short4) &&
+                   !attr->getRawData().empty()) {
             const auto stride = attr->getDataType() == gfx::AttributeDataType::Short4 ? sizeof(std::int16_t) * 4
                                                                                       : sizeof(std::int16_t) * 2;
             vertexReader = VertexReader{attr->getRawData().data(), vertexCount, stride};
@@ -3496,10 +3596,14 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
                     reader.count = attr.getRawData().size() / reader.stride;
                 }
             };
-            if (const auto& attr = attrs->get(shaders::idCollisionAnchorPosVertexAttribute)) initShort2Reader(*attr, collisionAnchorPosReader);
-            if (const auto& attr = attrs->get(shaders::idCollisionExtrudeVertexAttribute)) initShort2Reader(*attr, collisionExtrudeReader);
-            if (const auto& attr = attrs->get(shaders::idCollisionPlacedVertexAttribute)) initUShort2Reader(*attr, collisionPlacedReader);
-            if (const auto& attr = attrs->get(shaders::idCollisionShiftVertexAttribute)) initFloat2Reader(*attr, collisionShiftReader);
+            if (const auto& attr = attrs->get(shaders::idCollisionAnchorPosVertexAttribute))
+                initShort2Reader(*attr, collisionAnchorPosReader);
+            if (const auto& attr = attrs->get(shaders::idCollisionExtrudeVertexAttribute))
+                initShort2Reader(*attr, collisionExtrudeReader);
+            if (const auto& attr = attrs->get(shaders::idCollisionPlacedVertexAttribute))
+                initUShort2Reader(*attr, collisionPlacedReader);
+            if (const auto& attr = attrs->get(shaders::idCollisionShiftVertexAttribute))
+                initFloat2Reader(*attr, collisionShiftReader);
         }
         if (!collisionAnchorPosReader.data || !collisionExtrudeReader.data || !collisionPlacedReader.data) {
             return;
@@ -3552,7 +3656,8 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
                     reader.stride = attr.getSharedStride();
                     reader.components = attr.getSharedType() == gfx::AttributeDataType::Float ? 1 : 2;
                     reader.count = attr.getSharedRawData()->getRawCount() - attr.getSharedVertexOffset();
-                } else if ((attr.getDataType() == gfx::AttributeDataType::Float2 || attr.getDataType() == gfx::AttributeDataType::Float) &&
+                } else if ((attr.getDataType() == gfx::AttributeDataType::Float2 ||
+                            attr.getDataType() == gfx::AttributeDataType::Float) &&
                            !attr.getRawData().empty()) {
                     reader.data = attr.getRawData().data();
                     reader.components = attr.getDataType() == gfx::AttributeDataType::Float ? 1 : 2;
@@ -3574,25 +3679,33 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
                 }
             };
 
-            if (const auto& attr = attrs->get(shaders::idSymbolPosOffsetVertexAttribute)) initShort4Reader(*attr, symbolPosOffsetReader);
-            if (const auto& attr = attrs->get(shaders::idSymbolDataVertexAttribute)) initUShort4Reader(*attr, symbolDataReader);
+            if (const auto& attr = attrs->get(shaders::idSymbolPosOffsetVertexAttribute))
+                initShort4Reader(*attr, symbolPosOffsetReader);
+            if (const auto& attr = attrs->get(shaders::idSymbolDataVertexAttribute))
+                initUShort4Reader(*attr, symbolDataReader);
             if (!symbolTextAndIconDrawable) {
-                if (const auto& attr = attrs->get(shaders::idSymbolPixelOffsetVertexAttribute)) initShort4Reader(*attr, symbolPixelOffsetReader);
+                if (const auto& attr = attrs->get(shaders::idSymbolPixelOffsetVertexAttribute))
+                    initShort4Reader(*attr, symbolPixelOffsetReader);
             }
-            if (const auto& attr = attrs->get(shaders::idSymbolProjectedPosVertexAttribute)) initFloat3Reader(*attr, symbolProjectedPosReader);
-            if (const auto& attr = attrs->get(shaders::idSymbolFadeOpacityVertexAttribute)) initFloatReader(*attr, symbolFadeOpacityReader);
-            if (const auto& attr = attrs->get(shaders::idSymbolOpacityVertexAttribute)) initFloat2Reader(*attr, symbolOpacityReader);
+            if (const auto& attr = attrs->get(shaders::idSymbolProjectedPosVertexAttribute))
+                initFloat3Reader(*attr, symbolProjectedPosReader);
+            if (const auto& attr = attrs->get(shaders::idSymbolFadeOpacityVertexAttribute))
+                initFloatReader(*attr, symbolFadeOpacityReader);
+            if (const auto& attr = attrs->get(shaders::idSymbolOpacityVertexAttribute))
+                initFloat2Reader(*attr, symbolOpacityReader);
             if (symbolSDFDrawable || symbolTextAndIconDrawable) {
                 const auto initFloat4Reader = [](const gfx::VertexAttribute& attr, Float4Reader& reader) {
                     reader.attribute = &attr;
                     if (attr.getSharedRawData() && (attr.getSharedType() == gfx::AttributeDataType::Float4 ||
                                                     attr.getSharedType() == gfx::AttributeDataType::Float2)) {
-                        const auto offset = attr.getSharedOffset() + attr.getSharedVertexOffset() * attr.getSharedStride();
+                        const auto offset = attr.getSharedOffset() +
+                                            attr.getSharedVertexOffset() * attr.getSharedStride();
                         reader.data = static_cast<const std::uint8_t*>(attr.getSharedRawData()->getRawData()) + offset;
                         reader.stride = attr.getSharedStride();
                         reader.components = attr.getSharedType() == gfx::AttributeDataType::Float2 ? 2 : 4;
                         reader.count = attr.getSharedRawData()->getRawCount() - attr.getSharedVertexOffset();
-                    } else if ((attr.getDataType() == gfx::AttributeDataType::Float4 || attr.getDataType() == gfx::AttributeDataType::Float2) &&
+                    } else if ((attr.getDataType() == gfx::AttributeDataType::Float4 ||
+                                attr.getDataType() == gfx::AttributeDataType::Float2) &&
                                !attr.getRawData().empty()) {
                         reader.data = attr.getRawData().data();
                         reader.components = attr.getDataType() == gfx::AttributeDataType::Float2 ? 2 : 4;
@@ -3600,14 +3713,19 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
                         reader.count = attr.getRawData().size() / reader.stride;
                     }
                 };
-                if (const auto& attr = attrs->get(shaders::idSymbolColorVertexAttribute)) initFloat4Reader(*attr, symbolFillColorReader);
-                if (const auto& attr = attrs->get(shaders::idSymbolHaloColorVertexAttribute)) initFloat4Reader(*attr, symbolHaloColorReader);
-                if (const auto& attr = attrs->get(shaders::idSymbolHaloWidthVertexAttribute)) initFloat2Reader(*attr, symbolHaloWidthReader);
-                if (const auto& attr = attrs->get(shaders::idSymbolHaloBlurVertexAttribute)) initFloat2Reader(*attr, symbolHaloBlurReader);
+                if (const auto& attr = attrs->get(shaders::idSymbolColorVertexAttribute))
+                    initFloat4Reader(*attr, symbolFillColorReader);
+                if (const auto& attr = attrs->get(shaders::idSymbolHaloColorVertexAttribute))
+                    initFloat4Reader(*attr, symbolHaloColorReader);
+                if (const auto& attr = attrs->get(shaders::idSymbolHaloWidthVertexAttribute))
+                    initFloat2Reader(*attr, symbolHaloWidthReader);
+                if (const auto& attr = attrs->get(shaders::idSymbolHaloBlurVertexAttribute))
+                    initFloat2Reader(*attr, symbolHaloBlurReader);
             }
         }
-        if (!symbolPosOffsetReader.data || !symbolDataReader.data || (!symbolTextAndIconDrawable && !symbolPixelOffsetReader.data) ||
-            !symbolProjectedPosReader.data || !symbolFadeOpacityReader.data) {
+        if (!symbolPosOffsetReader.data || !symbolDataReader.data ||
+            (!symbolTextAndIconDrawable && !symbolPixelOffsetReader.data) || !symbolProjectedPosReader.data ||
+            !symbolFadeOpacityReader.data) {
             return;
         }
     } else if (heatmapDrawable) {
@@ -3621,7 +3739,8 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
                     reader.stride = attr.getSharedStride();
                     reader.components = attr.getSharedType() == gfx::AttributeDataType::Float ? 1 : 2;
                     reader.count = attr.getSharedRawData()->getRawCount() - attr.getSharedVertexOffset();
-                } else if ((attr.getDataType() == gfx::AttributeDataType::Float2 || attr.getDataType() == gfx::AttributeDataType::Float) &&
+                } else if ((attr.getDataType() == gfx::AttributeDataType::Float2 ||
+                            attr.getDataType() == gfx::AttributeDataType::Float) &&
                            !attr.getRawData().empty()) {
                     reader.data = attr.getRawData().data();
                     reader.components = attr.getDataType() == gfx::AttributeDataType::Float ? 1 : 2;
@@ -3629,17 +3748,22 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
                     reader.count = attr.getRawData().size() / reader.stride;
                 }
             };
-            if (const auto& attr = attrs->get(shaders::idHeatmapWeightVertexAttribute)) initFloat2Reader(*attr, heatmapWeightReader);
-            if (const auto& attr = attrs->get(shaders::idHeatmapRadiusVertexAttribute)) initFloat2Reader(*attr, heatmapRadiusReader);
+            if (const auto& attr = attrs->get(shaders::idHeatmapWeightVertexAttribute))
+                initFloat2Reader(*attr, heatmapWeightReader);
+            if (const auto& attr = attrs->get(shaders::idHeatmapRadiusVertexAttribute))
+                initFloat2Reader(*attr, heatmapRadiusReader);
         }
     } else if (fillExtrusionDrawable) {
         if (const auto& attrs = getVertexAttributes()) {
             if (const auto& attr = attrs->get(shaders::idFillExtrusionNormalEdVertexAttribute)) {
                 if (attr->getSharedRawData() && attr->getSharedType() == gfx::AttributeDataType::Short4) {
-                    const auto offset = attr->getSharedOffset() + attr->getSharedVertexOffset() * attr->getSharedStride();
-                    fillExtrusionNormalReader.data = static_cast<const std::uint8_t*>(attr->getSharedRawData()->getRawData()) + offset;
+                    const auto offset = attr->getSharedOffset() +
+                                        attr->getSharedVertexOffset() * attr->getSharedStride();
+                    fillExtrusionNormalReader.data =
+                        static_cast<const std::uint8_t*>(attr->getSharedRawData()->getRawData()) + offset;
                     fillExtrusionNormalReader.stride = attr->getSharedStride();
-                    fillExtrusionNormalReader.count = attr->getSharedRawData()->getRawCount() - attr->getSharedVertexOffset();
+                    fillExtrusionNormalReader.count = attr->getSharedRawData()->getRawCount() -
+                                                      attr->getSharedVertexOffset();
                 } else if (attr->getDataType() == gfx::AttributeDataType::Short4 && !attr->getRawData().empty()) {
                     fillExtrusionNormalReader.data = attr->getRawData().data();
                     fillExtrusionNormalReader.stride = sizeof(std::int16_t) * 4;
@@ -3665,8 +3789,10 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
                     reader.count = attr.getRawData().size() / reader.stride;
                 }
             };
-            if (const auto& attr = attrs->get(shaders::idFillExtrusionBaseVertexAttribute)) initFloat2Reader(*attr, fillExtrusionBaseReader);
-            if (const auto& attr = attrs->get(shaders::idFillExtrusionHeightVertexAttribute)) initFloat2Reader(*attr, fillExtrusionHeightReader);
+            if (const auto& attr = attrs->get(shaders::idFillExtrusionBaseVertexAttribute))
+                initFloat2Reader(*attr, fillExtrusionBaseReader);
+            if (const auto& attr = attrs->get(shaders::idFillExtrusionHeightVertexAttribute))
+                initFloat2Reader(*attr, fillExtrusionHeightReader);
 
             const auto initUShort4Reader = [](const gfx::VertexAttribute& attr, UShort4Reader& reader) {
                 if (attr.getSharedRawData() && attr.getSharedType() == gfx::AttributeDataType::UShort4) {
@@ -3680,8 +3806,10 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
                     reader.count = attr.getRawData().size() / reader.stride;
                 }
             };
-            if (const auto& attr = attrs->get(shaders::idFillExtrusionPatternFromVertexAttribute)) initUShort4Reader(*attr, fillPatternFromReader);
-            if (const auto& attr = attrs->get(shaders::idFillExtrusionPatternToVertexAttribute)) initUShort4Reader(*attr, fillPatternToReader);
+            if (const auto& attr = attrs->get(shaders::idFillExtrusionPatternFromVertexAttribute))
+                initUShort4Reader(*attr, fillPatternFromReader);
+            if (const auto& attr = attrs->get(shaders::idFillExtrusionPatternToVertexAttribute))
+                initUShort4Reader(*attr, fillPatternToReader);
         }
         if (!fillExtrusionNormalReader.data) {
             return;
@@ -3690,11 +3818,15 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
         if (const auto& attrs = getVertexAttributes()) {
             if (const auto& dataAttr = attrs->get(shaders::idLineDataVertexAttribute)) {
                 if (dataAttr->getSharedRawData() && dataAttr->getSharedType() == gfx::AttributeDataType::UByte4) {
-                    const auto offset = dataAttr->getSharedOffset() + dataAttr->getSharedVertexOffset() * dataAttr->getSharedStride();
-                    lineDataReader.data = static_cast<const std::uint8_t*>(dataAttr->getSharedRawData()->getRawData()) + offset;
+                    const auto offset = dataAttr->getSharedOffset() +
+                                        dataAttr->getSharedVertexOffset() * dataAttr->getSharedStride();
+                    lineDataReader.data = static_cast<const std::uint8_t*>(dataAttr->getSharedRawData()->getRawData()) +
+                                          offset;
                     lineDataReader.stride = dataAttr->getSharedStride();
-                    lineDataReader.count = dataAttr->getSharedRawData()->getRawCount() - dataAttr->getSharedVertexOffset();
-                } else if (dataAttr->getDataType() == gfx::AttributeDataType::UByte4 && !dataAttr->getRawData().empty()) {
+                    lineDataReader.count = dataAttr->getSharedRawData()->getRawCount() -
+                                           dataAttr->getSharedVertexOffset();
+                } else if (dataAttr->getDataType() == gfx::AttributeDataType::UByte4 &&
+                           !dataAttr->getRawData().empty()) {
                     lineDataReader.data = dataAttr->getRawData().data();
                     lineDataReader.stride = sizeof(std::uint8_t) * 4;
                     lineDataReader.count = dataAttr->getRawData().size() / lineDataReader.stride;
@@ -3736,7 +3868,8 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
             if (linePatternDrawable) {
                 const auto initUShort4Reader = [](const gfx::VertexAttribute& attr, UShort4Reader& reader) {
                     if (attr.getSharedRawData() && attr.getSharedType() == gfx::AttributeDataType::UShort4) {
-                        const auto offset = attr.getSharedOffset() + attr.getSharedVertexOffset() * attr.getSharedStride();
+                        const auto offset = attr.getSharedOffset() +
+                                            attr.getSharedVertexOffset() * attr.getSharedStride();
                         reader.data = static_cast<const std::uint8_t*>(attr.getSharedRawData()->getRawData()) + offset;
                         reader.stride = attr.getSharedStride();
                         reader.count = attr.getSharedRawData()->getRawCount() - attr.getSharedVertexOffset();
@@ -3746,8 +3879,10 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
                         reader.count = attr.getRawData().size() / reader.stride;
                     }
                 };
-                if (const auto& attr = attrs->get(shaders::idLinePatternFromVertexAttribute)) initUShort4Reader(*attr, fillPatternFromReader);
-                if (const auto& attr = attrs->get(shaders::idLinePatternToVertexAttribute)) initUShort4Reader(*attr, fillPatternToReader);
+                if (const auto& attr = attrs->get(shaders::idLinePatternFromVertexAttribute))
+                    initUShort4Reader(*attr, fillPatternFromReader);
+                if (const auto& attr = attrs->get(shaders::idLinePatternToVertexAttribute))
+                    initUShort4Reader(*attr, fillPatternToReader);
             }
         }
         if (!lineDataReader.data) {
@@ -3764,7 +3899,8 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
                     reader.stride = attr.getSharedStride();
                     reader.components = attr.getSharedType() == gfx::AttributeDataType::Float ? 1 : 2;
                     reader.count = attr.getSharedRawData()->getRawCount() - attr.getSharedVertexOffset();
-                } else if ((attr.getDataType() == gfx::AttributeDataType::Float2 || attr.getDataType() == gfx::AttributeDataType::Float) &&
+                } else if ((attr.getDataType() == gfx::AttributeDataType::Float2 ||
+                            attr.getDataType() == gfx::AttributeDataType::Float) &&
                            !attr.getRawData().empty()) {
                     reader.data = attr.getRawData().data();
                     reader.components = attr.getDataType() == gfx::AttributeDataType::Float ? 1 : 2;
@@ -3781,7 +3917,8 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
                     reader.stride = attr.getSharedStride();
                     reader.components = attr.getSharedType() == gfx::AttributeDataType::Float2 ? 2 : 4;
                     reader.count = attr.getSharedRawData()->getRawCount() - attr.getSharedVertexOffset();
-                } else if ((attr.getDataType() == gfx::AttributeDataType::Float4 || attr.getDataType() == gfx::AttributeDataType::Float2) &&
+                } else if ((attr.getDataType() == gfx::AttributeDataType::Float4 ||
+                            attr.getDataType() == gfx::AttributeDataType::Float2) &&
                            !attr.getRawData().empty()) {
                     reader.data = attr.getRawData().data();
                     reader.components = attr.getDataType() == gfx::AttributeDataType::Float2 ? 2 : 4;
@@ -3789,24 +3926,35 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
                     reader.count = attr.getRawData().size() / reader.stride;
                 }
             };
-            if (const auto& attr = attrs->get(shaders::idCircleColorVertexAttribute)) initFloat4Reader(*attr, circleColorReader);
-            if (const auto& attr = attrs->get(shaders::idCircleRadiusVertexAttribute)) initFloat2Reader(*attr, circleRadiusReader);
-            if (const auto& attr = attrs->get(shaders::idCircleBlurVertexAttribute)) initFloat2Reader(*attr, circleBlurReader);
-            if (const auto& attr = attrs->get(shaders::idCircleOpacityVertexAttribute)) initFloat2Reader(*attr, circleOpacityReader);
-            if (const auto& attr = attrs->get(shaders::idCircleStrokeColorVertexAttribute)) initFloat4Reader(*attr, circleStrokeColorReader);
-            if (const auto& attr = attrs->get(shaders::idCircleStrokeWidthVertexAttribute)) initFloat2Reader(*attr, circleStrokeWidthReader);
-            if (const auto& attr = attrs->get(shaders::idCircleStrokeOpacityVertexAttribute)) initFloat2Reader(*attr, circleStrokeOpacityReader);
+            if (const auto& attr = attrs->get(shaders::idCircleColorVertexAttribute))
+                initFloat4Reader(*attr, circleColorReader);
+            if (const auto& attr = attrs->get(shaders::idCircleRadiusVertexAttribute))
+                initFloat2Reader(*attr, circleRadiusReader);
+            if (const auto& attr = attrs->get(shaders::idCircleBlurVertexAttribute))
+                initFloat2Reader(*attr, circleBlurReader);
+            if (const auto& attr = attrs->get(shaders::idCircleOpacityVertexAttribute))
+                initFloat2Reader(*attr, circleOpacityReader);
+            if (const auto& attr = attrs->get(shaders::idCircleStrokeColorVertexAttribute))
+                initFloat4Reader(*attr, circleStrokeColorReader);
+            if (const auto& attr = attrs->get(shaders::idCircleStrokeWidthVertexAttribute))
+                initFloat2Reader(*attr, circleStrokeWidthReader);
+            if (const auto& attr = attrs->get(shaders::idCircleStrokeOpacityVertexAttribute))
+                initFloat2Reader(*attr, circleStrokeOpacityReader);
         }
     } else if (hillshadePrepareDrawable || hillshadeDrawable) {
         if (const auto& attrs = getVertexAttributes()) {
             if (const auto& attr = attrs->get(shaders::idHillshadeTexturePosVertexAttribute)) {
                 if (attr->getSharedRawData() && attr->getSharedType() == gfx::AttributeDataType::Short2) {
-                    const auto offset = attr->getSharedOffset() + attr->getSharedVertexOffset() * attr->getSharedStride();
-                    rasterTexturePosReader = VertexReader{static_cast<const std::uint8_t*>(attr->getSharedRawData()->getRawData()) + offset,
-                                                          attr->getSharedRawData()->getRawCount() - attr->getSharedVertexOffset(),
-                                                          attr->getSharedStride()};
+                    const auto offset = attr->getSharedOffset() +
+                                        attr->getSharedVertexOffset() * attr->getSharedStride();
+                    rasterTexturePosReader = VertexReader{
+                        static_cast<const std::uint8_t*>(attr->getSharedRawData()->getRawData()) + offset,
+                        attr->getSharedRawData()->getRawCount() - attr->getSharedVertexOffset(),
+                        attr->getSharedStride()};
                 } else if (attr->getDataType() == gfx::AttributeDataType::Short2 && !attr->getRawData().empty()) {
-                    rasterTexturePosReader = VertexReader{attr->getRawData().data(), attr->getRawData().size() / (sizeof(std::int16_t) * 2), sizeof(std::int16_t) * 2};
+                    rasterTexturePosReader = VertexReader{attr->getRawData().data(),
+                                                          attr->getRawData().size() / (sizeof(std::int16_t) * 2),
+                                                          sizeof(std::int16_t) * 2};
                 }
             }
         }
@@ -3817,12 +3965,16 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
         if (const auto& attrs = getVertexAttributes()) {
             if (const auto& attr = attrs->get(shaders::idColorReliefTexturePosVertexAttribute)) {
                 if (attr->getSharedRawData() && attr->getSharedType() == gfx::AttributeDataType::Short2) {
-                    const auto offset = attr->getSharedOffset() + attr->getSharedVertexOffset() * attr->getSharedStride();
-                    rasterTexturePosReader = VertexReader{static_cast<const std::uint8_t*>(attr->getSharedRawData()->getRawData()) + offset,
-                                                          attr->getSharedRawData()->getRawCount() - attr->getSharedVertexOffset(),
-                                                          attr->getSharedStride()};
+                    const auto offset = attr->getSharedOffset() +
+                                        attr->getSharedVertexOffset() * attr->getSharedStride();
+                    rasterTexturePosReader = VertexReader{
+                        static_cast<const std::uint8_t*>(attr->getSharedRawData()->getRawData()) + offset,
+                        attr->getSharedRawData()->getRawCount() - attr->getSharedVertexOffset(),
+                        attr->getSharedStride()};
                 } else if (attr->getDataType() == gfx::AttributeDataType::Short2 && !attr->getRawData().empty()) {
-                    rasterTexturePosReader = VertexReader{attr->getRawData().data(), attr->getRawData().size() / (sizeof(std::int16_t) * 2), sizeof(std::int16_t) * 2};
+                    rasterTexturePosReader = VertexReader{attr->getRawData().data(),
+                                                          attr->getRawData().size() / (sizeof(std::int16_t) * 2),
+                                                          sizeof(std::int16_t) * 2};
                 }
             }
         }
@@ -3833,12 +3985,16 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
         if (const auto& attrs = getVertexAttributes()) {
             if (const auto& attr = attrs->get(shaders::idRasterTexturePosVertexAttribute)) {
                 if (attr->getSharedRawData() && attr->getSharedType() == gfx::AttributeDataType::Short2) {
-                    const auto offset = attr->getSharedOffset() + attr->getSharedVertexOffset() * attr->getSharedStride();
-                    rasterTexturePosReader = VertexReader{static_cast<const std::uint8_t*>(attr->getSharedRawData()->getRawData()) + offset,
-                                                          attr->getSharedRawData()->getRawCount() - attr->getSharedVertexOffset(),
-                                                          attr->getSharedStride()};
+                    const auto offset = attr->getSharedOffset() +
+                                        attr->getSharedVertexOffset() * attr->getSharedStride();
+                    rasterTexturePosReader = VertexReader{
+                        static_cast<const std::uint8_t*>(attr->getSharedRawData()->getRawData()) + offset,
+                        attr->getSharedRawData()->getRawCount() - attr->getSharedVertexOffset(),
+                        attr->getSharedStride()};
                 } else if (attr->getDataType() == gfx::AttributeDataType::Short2 && !attr->getRawData().empty()) {
-                    rasterTexturePosReader = VertexReader{attr->getRawData().data(), attr->getRawData().size() / (sizeof(std::int16_t) * 2), sizeof(std::int16_t) * 2};
+                    rasterTexturePosReader = VertexReader{attr->getRawData().data(),
+                                                          attr->getRawData().size() / (sizeof(std::int16_t) * 2),
+                                                          sizeof(std::int16_t) * 2};
                 }
             }
         }
@@ -3859,14 +4015,17 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
                     reader.count = attr.getRawData().size() / reader.stride;
                 }
             };
-            if (const auto& attr = attrs->get(shaders::idFillPatternFromVertexAttribute)) initUShort4Reader(*attr, fillPatternFromReader);
-            if (const auto& attr = attrs->get(shaders::idFillPatternToVertexAttribute)) initUShort4Reader(*attr, fillPatternToReader);
+            if (const auto& attr = attrs->get(shaders::idFillPatternFromVertexAttribute))
+                initUShort4Reader(*attr, fillPatternFromReader);
+            if (const auto& attr = attrs->get(shaders::idFillPatternToVertexAttribute))
+                initUShort4Reader(*attr, fillPatternToReader);
         }
     }
 
     std::vector<MeshVertex> meshVertices(vertexReader.count);
     for (std::size_t i = 0; i < vertexReader.count; ++i) {
-        if (!vertexReader.read(static_cast<std::uint16_t>(i), meshVertices[i].position[0], meshVertices[i].position[1])) {
+        if (!vertexReader.read(
+                static_cast<std::uint16_t>(i), meshVertices[i].position[0], meshVertices[i].position[1])) {
             return;
         }
         if (collisionBoxDrawable || collisionCircleDrawable) {
@@ -3898,7 +4057,8 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
             float fadeOpacity = 0.0f;
             if (!symbolPosOffsetReader.read(static_cast<std::uint16_t>(i), posOffset) ||
                 !symbolDataReader.read(static_cast<std::uint16_t>(i), data) ||
-                (!symbolTextAndIconDrawable && !symbolPixelOffsetReader.read(static_cast<std::uint16_t>(i), pixelOffset)) ||
+                (!symbolTextAndIconDrawable &&
+                 !symbolPixelOffsetReader.read(static_cast<std::uint16_t>(i), pixelOffset)) ||
                 !symbolProjectedPosReader.read(static_cast<std::uint16_t>(i), projectedPos) ||
                 !symbolFadeOpacityReader.read(static_cast<std::uint16_t>(i), fadeOpacity)) {
                 return;
@@ -3923,13 +4083,17 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
                 auto haloBlur = symbolHaloBlur;
                 const auto vertexOpacity = unpackMixFloat(opacity, symbolOpacityT);
                 std::array<float, 4> packedFillColor;
-                if (symbolFillColorReader.read(static_cast<std::uint16_t>(i), packedFillColor)) fillColor = unpackMixColor(packedFillColor, symbolFillColorT);
+                if (symbolFillColorReader.read(static_cast<std::uint16_t>(i), packedFillColor))
+                    fillColor = unpackMixColor(packedFillColor, symbolFillColorT);
                 std::array<float, 4> packedHaloColor;
-                if (symbolHaloColorReader.read(static_cast<std::uint16_t>(i), packedHaloColor)) haloColor = unpackMixColor(packedHaloColor, symbolHaloColorT);
+                if (symbolHaloColorReader.read(static_cast<std::uint16_t>(i), packedHaloColor))
+                    haloColor = unpackMixColor(packedHaloColor, symbolHaloColorT);
                 std::array<float, 2> packedHaloWidth;
-                if (symbolHaloWidthReader.read(static_cast<std::uint16_t>(i), packedHaloWidth)) haloWidth = unpackMixFloat(packedHaloWidth, symbolHaloWidthT);
+                if (symbolHaloWidthReader.read(static_cast<std::uint16_t>(i), packedHaloWidth))
+                    haloWidth = unpackMixFloat(packedHaloWidth, symbolHaloWidthT);
                 std::array<float, 2> packedHaloBlur;
-                if (symbolHaloBlurReader.read(static_cast<std::uint16_t>(i), packedHaloBlur)) haloBlur = unpackMixFloat(packedHaloBlur, symbolHaloBlurT);
+                if (symbolHaloBlurReader.read(static_cast<std::uint16_t>(i), packedHaloBlur))
+                    haloBlur = unpackMixFloat(packedHaloBlur, symbolHaloBlurT);
                 meshVertices[i].symbolFillColor[0] = fillColor.fR;
                 meshVertices[i].symbolFillColor[1] = fillColor.fG;
                 meshVertices[i].symbolFillColor[2] = fillColor.fB;
@@ -3944,7 +4108,9 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
                 meshVertices[i].symbolHaloBlur[1] = haloBlur;
             }
         } else if (rasterDrawable || colorReliefDrawable || hillshadePrepareDrawable || hillshadeDrawable) {
-            if (!rasterTexturePosReader.read(static_cast<std::uint16_t>(i), meshVertices[i].rasterTexturePos[0], meshVertices[i].rasterTexturePos[1])) {
+            if (!rasterTexturePosReader.read(static_cast<std::uint16_t>(i),
+                                             meshVertices[i].rasterTexturePos[0],
+                                             meshVertices[i].rasterTexturePos[1])) {
                 return;
             }
         } else if (heatmapDrawable) {
@@ -3985,16 +4151,31 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
                 std::copy(vertexPatternFrom.begin(), vertexPatternFrom.end(), meshVertices[i].fillPatternFrom);
                 std::copy(vertexPatternTo.begin(), vertexPatternTo.end(), meshVertices[i].fillPatternTo);
 
-                const auto patternPos = isTopVertex ? std::array<float, 2>{meshVertices[i].position[0], meshVertices[i].position[1]}
-                                                    : std::array<float, 2>{static_cast<float>(normalEd[3]), meshVertices[i].fillExtrusionZ * fillExtrusionHeightFactor};
-                const std::array<float, 2> displaySizeA = {(vertexPatternFrom[2] - vertexPatternFrom[0]) / parameters.pixelRatio,
-                                                           (vertexPatternFrom[3] - vertexPatternFrom[1]) / parameters.pixelRatio};
-                const std::array<float, 2> displaySizeB = {(vertexPatternTo[2] - vertexPatternTo[0]) / parameters.pixelRatio,
-                                                           (vertexPatternTo[3] - vertexPatternTo[1]) / parameters.pixelRatio};
-                const std::array<float, 2> patternSizeA = {fillPatternFromScale * displaySizeA[0], fillPatternFromScale * displaySizeA[1]};
-                const std::array<float, 2> patternSizeB = {fillPatternToScale * displaySizeB[0], fillPatternToScale * displaySizeB[1]};
-                const auto posA = getPatternPos(fillPatternPixelCoordUpper, fillPatternPixelCoordLower, patternSizeA, fillPatternTileRatio, patternPos);
-                const auto posB = getPatternPos(fillPatternPixelCoordUpper, fillPatternPixelCoordLower, patternSizeB, fillPatternTileRatio, patternPos);
+                const auto patternPos = isTopVertex ? std::array<float, 2>{meshVertices[i].position[0],
+                                                                           meshVertices[i].position[1]}
+                                                    : std::array<float, 2>{
+                                                          static_cast<float>(normalEd[3]),
+                                                          meshVertices[i].fillExtrusionZ * fillExtrusionHeightFactor};
+                const std::array<float, 2> displaySizeA = {
+                    (vertexPatternFrom[2] - vertexPatternFrom[0]) / parameters.pixelRatio,
+                    (vertexPatternFrom[3] - vertexPatternFrom[1]) / parameters.pixelRatio};
+                const std::array<float, 2> displaySizeB = {
+                    (vertexPatternTo[2] - vertexPatternTo[0]) / parameters.pixelRatio,
+                    (vertexPatternTo[3] - vertexPatternTo[1]) / parameters.pixelRatio};
+                const std::array<float, 2> patternSizeA = {fillPatternFromScale * displaySizeA[0],
+                                                           fillPatternFromScale * displaySizeA[1]};
+                const std::array<float, 2> patternSizeB = {fillPatternToScale * displaySizeB[0],
+                                                           fillPatternToScale * displaySizeB[1]};
+                const auto posA = getPatternPos(fillPatternPixelCoordUpper,
+                                                fillPatternPixelCoordLower,
+                                                patternSizeA,
+                                                fillPatternTileRatio,
+                                                patternPos);
+                const auto posB = getPatternPos(fillPatternPixelCoordUpper,
+                                                fillPatternPixelCoordLower,
+                                                patternSizeB,
+                                                fillPatternTileRatio,
+                                                patternPos);
                 meshVertices[i].fillPatternPosA[0] = posA[0];
                 meshVertices[i].fillPatternPosA[1] = posA[1];
                 meshVertices[i].fillPatternPosB[0] = posB[0];
@@ -4023,19 +4204,26 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
             auto vertexStrokeWidth = circleStrokeWidth;
             auto vertexStrokeOpacity = circleStrokeOpacity;
             std::array<float, 4> packedColor;
-            if (circleColorReader.read(static_cast<std::uint16_t>(i), packedColor)) vertexColor = unpackMixColor(packedColor, circleColorT);
+            if (circleColorReader.read(static_cast<std::uint16_t>(i), packedColor))
+                vertexColor = unpackMixColor(packedColor, circleColorT);
             std::array<float, 2> packedRadius;
-            if (circleRadiusReader.read(static_cast<std::uint16_t>(i), packedRadius)) vertexRadius = unpackMixFloat(packedRadius, circleRadiusT);
+            if (circleRadiusReader.read(static_cast<std::uint16_t>(i), packedRadius))
+                vertexRadius = unpackMixFloat(packedRadius, circleRadiusT);
             std::array<float, 2> packedBlur;
-            if (circleBlurReader.read(static_cast<std::uint16_t>(i), packedBlur)) vertexBlur = unpackMixFloat(packedBlur, circleBlurT);
+            if (circleBlurReader.read(static_cast<std::uint16_t>(i), packedBlur))
+                vertexBlur = unpackMixFloat(packedBlur, circleBlurT);
             std::array<float, 2> packedOpacity;
-            if (circleOpacityReader.read(static_cast<std::uint16_t>(i), packedOpacity)) vertexOpacity = unpackMixFloat(packedOpacity, circleOpacityT);
+            if (circleOpacityReader.read(static_cast<std::uint16_t>(i), packedOpacity))
+                vertexOpacity = unpackMixFloat(packedOpacity, circleOpacityT);
             std::array<float, 4> packedStrokeColor;
-            if (circleStrokeColorReader.read(static_cast<std::uint16_t>(i), packedStrokeColor)) vertexStrokeColor = unpackMixColor(packedStrokeColor, circleStrokeColorT);
+            if (circleStrokeColorReader.read(static_cast<std::uint16_t>(i), packedStrokeColor))
+                vertexStrokeColor = unpackMixColor(packedStrokeColor, circleStrokeColorT);
             std::array<float, 2> packedStrokeWidth;
-            if (circleStrokeWidthReader.read(static_cast<std::uint16_t>(i), packedStrokeWidth)) vertexStrokeWidth = unpackMixFloat(packedStrokeWidth, circleStrokeWidthT);
+            if (circleStrokeWidthReader.read(static_cast<std::uint16_t>(i), packedStrokeWidth))
+                vertexStrokeWidth = unpackMixFloat(packedStrokeWidth, circleStrokeWidthT);
             std::array<float, 2> packedStrokeOpacity;
-            if (circleStrokeOpacityReader.read(static_cast<std::uint16_t>(i), packedStrokeOpacity)) vertexStrokeOpacity = unpackMixFloat(packedStrokeOpacity, circleStrokeOpacityT);
+            if (circleStrokeOpacityReader.read(static_cast<std::uint16_t>(i), packedStrokeOpacity))
+                vertexStrokeOpacity = unpackMixFloat(packedStrokeOpacity, circleStrokeOpacityT);
 
             meshVertices[i].circleColor[0] = vertexColor.fR;
             meshVertices[i].circleColor[1] = vertexColor.fG;
@@ -4121,18 +4309,23 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
     if (const auto& attrs = getVertexAttributes()) {
         Float4Reader colorReader;
         Float2Reader opacityReader;
-        const auto colorAttributeId = lineDrawable ? static_cast<std::size_t>(shaders::idLineColorVertexAttribute)
-                                      : (fillExtrusionDrawable ? static_cast<std::size_t>(shaders::idFillExtrusionColorVertexAttribute)
-                                         : (fillOutlineDrawable ? static_cast<std::size_t>(shaders::idFillOutlineColorVertexAttribute)
-                                                                : static_cast<std::size_t>(shaders::idFillColorVertexAttribute)));
+        const auto colorAttributeId =
+            lineDrawable
+                ? static_cast<std::size_t>(shaders::idLineColorVertexAttribute)
+                : (fillExtrusionDrawable
+                       ? static_cast<std::size_t>(shaders::idFillExtrusionColorVertexAttribute)
+                       : (fillOutlineDrawable ? static_cast<std::size_t>(shaders::idFillOutlineColorVertexAttribute)
+                                              : static_cast<std::size_t>(shaders::idFillColorVertexAttribute)));
         const auto opacityAttributeId = lineDrawable ? static_cast<std::size_t>(shaders::idLineOpacityVertexAttribute)
                                                      : static_cast<std::size_t>(shaders::idFillOpacityVertexAttribute);
         if (const auto& colorAttr = attrs->get(colorAttributeId)) {
             colorReader.attribute = colorAttr.get();
             if (colorAttr->getSharedRawData() && (colorAttr->getSharedType() == gfx::AttributeDataType::Float4 ||
                                                   colorAttr->getSharedType() == gfx::AttributeDataType::Float2)) {
-                const auto offset = colorAttr->getSharedOffset() + colorAttr->getSharedVertexOffset() * colorAttr->getSharedStride();
-                colorReader.data = static_cast<const std::uint8_t*>(colorAttr->getSharedRawData()->getRawData()) + offset;
+                const auto offset = colorAttr->getSharedOffset() +
+                                    colorAttr->getSharedVertexOffset() * colorAttr->getSharedStride();
+                colorReader.data = static_cast<const std::uint8_t*>(colorAttr->getSharedRawData()->getRawData()) +
+                                   offset;
                 colorReader.stride = colorAttr->getSharedStride();
                 colorReader.components = colorAttr->getSharedType() == gfx::AttributeDataType::Float2 ? 2 : 4;
                 colorReader.count = colorAttr->getSharedRawData()->getRawCount() - colorAttr->getSharedVertexOffset();
@@ -4149,11 +4342,14 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
             opacityReader.attribute = opacityAttr.get();
             if (opacityAttr->getSharedRawData() && (opacityAttr->getSharedType() == gfx::AttributeDataType::Float2 ||
                                                     opacityAttr->getSharedType() == gfx::AttributeDataType::Float)) {
-                const auto offset = opacityAttr->getSharedOffset() + opacityAttr->getSharedVertexOffset() * opacityAttr->getSharedStride();
-                opacityReader.data = static_cast<const std::uint8_t*>(opacityAttr->getSharedRawData()->getRawData()) + offset;
+                const auto offset = opacityAttr->getSharedOffset() +
+                                    opacityAttr->getSharedVertexOffset() * opacityAttr->getSharedStride();
+                opacityReader.data = static_cast<const std::uint8_t*>(opacityAttr->getSharedRawData()->getRawData()) +
+                                     offset;
                 opacityReader.stride = opacityAttr->getSharedStride();
                 opacityReader.components = opacityAttr->getSharedType() == gfx::AttributeDataType::Float ? 1 : 2;
-                opacityReader.count = opacityAttr->getSharedRawData()->getRawCount() - opacityAttr->getSharedVertexOffset();
+                opacityReader.count = opacityAttr->getSharedRawData()->getRawCount() -
+                                      opacityAttr->getSharedVertexOffset();
             } else if ((opacityAttr->getDataType() == gfx::AttributeDataType::Float2 ||
                         opacityAttr->getDataType() == gfx::AttributeDataType::Float) &&
                        !opacityAttr->getRawData().empty()) {
@@ -4192,15 +4388,21 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
                 auto directional = minDirectional + (maxDirectional - minDirectional) * directionalFraction;
                 if (meshVertices[i].fillExtrusionNormal[1] != 0.0f) {
                     const auto fMin = 0.7f + (0.98f - 0.7f) * (1.0f - fillExtrusionLightIntensity);
-                    const auto factor = std::clamp((meshVertices[i].fillExtrusionT + fillExtrusionBase) * std::pow(fillExtrusionHeight / 150.0f, 0.5f), fMin, 1.0f);
+                    const auto factor = std::clamp((meshVertices[i].fillExtrusionT + fillExtrusionBase) *
+                                                       std::pow(fillExtrusionHeight / 150.0f, 0.5f),
+                                                   fMin,
+                                                   1.0f);
                     directional *= (1.0f - fillExtrusionVerticalGradient) + fillExtrusionVerticalGradient * factor;
                 }
                 const auto minLightR = 0.3f * (1.0f - fillExtrusionLightColor[0]);
                 const auto minLightG = 0.3f * (1.0f - fillExtrusionLightColor[1]);
                 const auto minLightB = 0.3f * (1.0f - fillExtrusionLightColor[2]);
-                vertexColor.fR = std::clamp((vertexColor.fR + 0.03f) * directional * fillExtrusionLightColor[0], minLightR, 1.0f);
-                vertexColor.fG = std::clamp((vertexColor.fG + 0.03f) * directional * fillExtrusionLightColor[1], minLightG, 1.0f);
-                vertexColor.fB = std::clamp((vertexColor.fB + 0.03f) * directional * fillExtrusionLightColor[2], minLightB, 1.0f);
+                vertexColor.fR = std::clamp(
+                    (vertexColor.fR + 0.03f) * directional * fillExtrusionLightColor[0], minLightR, 1.0f);
+                vertexColor.fG = std::clamp(
+                    (vertexColor.fG + 0.03f) * directional * fillExtrusionLightColor[1], minLightG, 1.0f);
+                vertexColor.fB = std::clamp(
+                    (vertexColor.fB + 0.03f) * directional * fillExtrusionLightColor[2], minLightB, 1.0f);
             }
             const auto premultiplied = premultiply(vertexColor, vertexOpacity);
             meshVertices[i].color[0] = premultiplied.fR;
@@ -4244,16 +4446,15 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
             if (right <= left || bottom <= top) {
                 return nullptr;
             }
-            const auto subset = image->makeSubset(nullptr, SkIRect::MakeLTRB(left, top, right, bottom), SkImage::RequiredProperties{});
+            const auto subset = image->makeSubset(
+                nullptr, SkIRect::MakeLTRB(left, top, right, bottom), SkImage::RequiredProperties{});
             if (!subset) {
                 return nullptr;
             }
             SkMatrix localMatrix;
             localMatrix.setScale(parameters.pixelRatio, parameters.pixelRatio);
-            return subset->makeShader(SkTileMode::kRepeat,
-                                      SkTileMode::kRepeat,
-                                      SkSamplingOptions(SkFilterMode::kLinear),
-                                      &localMatrix);
+            return subset->makeShader(
+                SkTileMode::kRepeat, SkTileMode::kRepeat, SkSamplingOptions(SkFilterMode::kLinear), &localMatrix);
         };
 
         const auto patternShader = makePatternShader(fillPatternFade < 0.5f ? fillPatternFrom : fillPatternTo);
@@ -4279,8 +4480,10 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
                 if (i0 >= meshVertices.size() || i1 >= meshVertices.size()) {
                     continue;
                 }
-                const auto p0 = projectToScreen(matrix, viewport, meshVertices[i0].position[0], meshVertices[i0].position[1]);
-                const auto p1 = projectToScreen(matrix, viewport, meshVertices[i1].position[0], meshVertices[i1].position[1]);
+                const auto p0 = projectToScreen(
+                    matrix, viewport, meshVertices[i0].position[0], meshVertices[i0].position[1]);
+                const auto p1 = projectToScreen(
+                    matrix, viewport, meshVertices[i1].position[0], meshVertices[i1].position[1]);
                 canvas->drawLine(p0[0], p0[1], p1[0], p1[1], linePaint);
             }
         }
@@ -4305,17 +4508,19 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
                     continue;
                 }
                 const auto color0 = SkColor4f{meshVertices[i0].color[0],
-                                               meshVertices[i0].color[1],
-                                               meshVertices[i0].color[2],
-                                               meshVertices[i0].color[3]};
+                                              meshVertices[i0].color[1],
+                                              meshVertices[i0].color[2],
+                                              meshVertices[i0].color[3]};
                 const auto paintColor = color0.fA > 0.0f ? SkColor4f{color0.fR / color0.fA,
                                                                      color0.fG / color0.fA,
                                                                      color0.fB / color0.fA,
                                                                      color0.fA}
-                                                        : color0;
+                                                         : color0;
                 linePaint.setColor4f(paintColor);
-                const auto p0 = projectToScreen(matrix, viewport, meshVertices[i0].position[0], meshVertices[i0].position[1]);
-                const auto p1 = projectToScreen(matrix, viewport, meshVertices[i1].position[0], meshVertices[i1].position[1]);
+                const auto p0 = projectToScreen(
+                    matrix, viewport, meshVertices[i0].position[0], meshVertices[i0].position[1]);
+                const auto p1 = projectToScreen(
+                    matrix, viewport, meshVertices[i1].position[0], meshVertices[i1].position[1]);
                 canvas->drawLine(p0[0], p0[1], p1[0], p1[1], linePaint);
             }
         }
@@ -4362,11 +4567,66 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
         return;
     }
 
+    if (debugLineDrawable) {
+        SkPaint linePaint;
+        linePaint.setAntiAlias(false);
+        linePaint.setStyle(SkPaint::kStroke_Style);
+        linePaint.setStrokeCap(SkPaint::kButt_Cap);
+        linePaint.setStrokeJoin(SkPaint::kMiter_Join);
+        linePaint.setColor4f(color);
+        for (const auto& segment : segments) {
+            if (!segment) {
+                continue;
+            }
+            const auto& seg = segment->getSegment();
+            const auto end = std::min(seg.indexOffset + seg.indexLength, indexes.size());
+            if (end <= seg.indexOffset) {
+                continue;
+            }
+            linePaint.setStrokeWidth(std::max(1.0f, segment->getMode().size));
+            if (segment->getMode().type == gfx::DrawModeType::LineStrip) {
+                std::optional<std::array<float, 2>> previous;
+                for (std::size_t index = seg.indexOffset; index < end; ++index) {
+                    const auto i = indexes[index];
+                    if (i >= meshVertices.size()) {
+                        continue;
+                    }
+                    const auto p = projectToScreen(matrix,
+                                                   viewport,
+                                                   meshVertices[i].position[0] * debugOverlayScale,
+                                                   meshVertices[i].position[1] * debugOverlayScale);
+                    if (previous) {
+                        canvas->drawLine((*previous)[0], (*previous)[1], p[0], p[1], linePaint);
+                    }
+                    previous = p;
+                }
+            } else if (segment->getMode().type == gfx::DrawModeType::Lines) {
+                for (std::size_t index = seg.indexOffset; index + 1 < end; index += 2) {
+                    const auto i0 = indexes[index];
+                    const auto i1 = indexes[index + 1];
+                    if (i0 >= meshVertices.size() || i1 >= meshVertices.size()) {
+                        continue;
+                    }
+                    const auto p0 = projectToScreen(matrix,
+                                                    viewport,
+                                                    meshVertices[i0].position[0] * debugOverlayScale,
+                                                    meshVertices[i0].position[1] * debugOverlayScale);
+                    const auto p1 = projectToScreen(matrix,
+                                                    viewport,
+                                                    meshVertices[i1].position[0] * debugOverlayScale,
+                                                    meshVertices[i1].position[1] * debugOverlayScale);
+                    canvas->drawLine(p0[0], p0[1], p1[0], p1[1], linePaint);
+                }
+            }
+        }
+        return;
+    }
+
     auto* directContext = static_cast<RendererBackend&>(parameters.backend).getDirectContext();
-    const auto vertexBuffer = SkMeshes::MakeVertexBuffer(directContext,
-                                                         meshVertices.data(),
-                                                         meshVertices.size() * sizeof(MeshVertex));
-    const auto indexBuffer = SkMeshes::MakeIndexBuffer(directContext, indexes.data(), indexes.size() * sizeof(std::uint16_t));
+    const auto vertexBuffer = SkMeshes::MakeVertexBuffer(
+        directContext, meshVertices.data(), meshVertices.size() * sizeof(MeshVertex));
+    const auto indexBuffer = SkMeshes::MakeIndexBuffer(
+        directContext, indexes.data(), indexes.size() * sizeof(std::uint16_t));
     if (!vertexBuffer || !indexBuffer) {
         return;
     }
@@ -4379,15 +4639,35 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
         const float cameraToCenterDistance = parameters.state.getCameraToCenterDistance();
         const float symbolFadeChange = parameters.symbolFadeChange;
         const float aspectRatio = parameters.state.getSize().aspectRatio();
-        writeUniform(uniforms, *specification, "u_label_plane_matrix", symbolLabelPlaneMatrix.data(), symbolLabelPlaneMatrix.size() * sizeof(float));
-        writeUniform(uniforms, *specification, "u_coord_matrix", symbolCoordMatrix.data(), symbolCoordMatrix.size() * sizeof(float));
-        writeUniform(uniforms, *specification, "u_camera_to_center_distance", &cameraToCenterDistance, sizeof(cameraToCenterDistance));
+        writeUniform(uniforms,
+                     *specification,
+                     "u_label_plane_matrix",
+                     symbolLabelPlaneMatrix.data(),
+                     symbolLabelPlaneMatrix.size() * sizeof(float));
+        writeUniform(uniforms,
+                     *specification,
+                     "u_coord_matrix",
+                     symbolCoordMatrix.data(),
+                     symbolCoordMatrix.size() * sizeof(float));
+        writeUniform(uniforms,
+                     *specification,
+                     "u_camera_to_center_distance",
+                     &cameraToCenterDistance,
+                     sizeof(cameraToCenterDistance));
         writeUniform(uniforms, *specification, "u_symbol_fade_change", &symbolFadeChange, sizeof(symbolFadeChange));
         writeUniform(uniforms, *specification, "u_aspect_ratio", &aspectRatio, sizeof(aspectRatio));
         writeUniform(uniforms, *specification, "u_rotate_symbol", &symbolRotateSymbol, sizeof(symbolRotateSymbol));
         writeUniform(uniforms, *specification, "u_pitch_with_map", &symbolPitchWithMap, sizeof(symbolPitchWithMap));
-        writeUniform(uniforms, *specification, "u_is_size_zoom_constant", &symbolIsSizeZoomConstant, sizeof(symbolIsSizeZoomConstant));
-        writeUniform(uniforms, *specification, "u_is_size_feature_constant", &symbolIsSizeFeatureConstant, sizeof(symbolIsSizeFeatureConstant));
+        writeUniform(uniforms,
+                     *specification,
+                     "u_is_size_zoom_constant",
+                     &symbolIsSizeZoomConstant,
+                     sizeof(symbolIsSizeZoomConstant));
+        writeUniform(uniforms,
+                     *specification,
+                     "u_is_size_feature_constant",
+                     &symbolIsSizeFeatureConstant,
+                     sizeof(symbolIsSizeFeatureConstant));
         writeUniform(uniforms, *specification, "u_is_offset", &symbolIsOffset, sizeof(symbolIsOffset));
         writeUniform(uniforms, *specification, "u_size_t", &symbolSizeT, sizeof(symbolSizeT));
         writeUniform(uniforms, *specification, "u_size", &symbolSize, sizeof(symbolSize));
@@ -4400,16 +4680,36 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
         const float symbolFadeChange = parameters.symbolFadeChange;
         const float aspectRatio = parameters.state.getSize().aspectRatio();
         const float devicePixelRatio = parameters.pixelRatio;
-        writeUniform(uniforms, *specification, "u_label_plane_matrix", symbolLabelPlaneMatrix.data(), symbolLabelPlaneMatrix.size() * sizeof(float));
-        writeUniform(uniforms, *specification, "u_coord_matrix", symbolCoordMatrix.data(), symbolCoordMatrix.size() * sizeof(float));
-        writeUniform(uniforms, *specification, "u_camera_to_center_distance", &cameraToCenterDistance, sizeof(cameraToCenterDistance));
+        writeUniform(uniforms,
+                     *specification,
+                     "u_label_plane_matrix",
+                     symbolLabelPlaneMatrix.data(),
+                     symbolLabelPlaneMatrix.size() * sizeof(float));
+        writeUniform(uniforms,
+                     *specification,
+                     "u_coord_matrix",
+                     symbolCoordMatrix.data(),
+                     symbolCoordMatrix.size() * sizeof(float));
+        writeUniform(uniforms,
+                     *specification,
+                     "u_camera_to_center_distance",
+                     &cameraToCenterDistance,
+                     sizeof(cameraToCenterDistance));
         writeUniform(uniforms, *specification, "u_symbol_fade_change", &symbolFadeChange, sizeof(symbolFadeChange));
         writeUniform(uniforms, *specification, "u_aspect_ratio", &aspectRatio, sizeof(aspectRatio));
         writeUniform(uniforms, *specification, "u_rotate_symbol", &symbolRotateSymbol, sizeof(symbolRotateSymbol));
         writeUniform(uniforms, *specification, "u_pitch_with_map", &symbolPitchWithMap, sizeof(symbolPitchWithMap));
         writeUniform(uniforms, *specification, "u_is_text", &symbolIsText, sizeof(symbolIsText));
-        writeUniform(uniforms, *specification, "u_is_size_zoom_constant", &symbolIsSizeZoomConstant, sizeof(symbolIsSizeZoomConstant));
-        writeUniform(uniforms, *specification, "u_is_size_feature_constant", &symbolIsSizeFeatureConstant, sizeof(symbolIsSizeFeatureConstant));
+        writeUniform(uniforms,
+                     *specification,
+                     "u_is_size_zoom_constant",
+                     &symbolIsSizeZoomConstant,
+                     sizeof(symbolIsSizeZoomConstant));
+        writeUniform(uniforms,
+                     *specification,
+                     "u_is_size_feature_constant",
+                     &symbolIsSizeFeatureConstant,
+                     sizeof(symbolIsSizeFeatureConstant));
         writeUniform(uniforms, *specification, "u_is_offset", &symbolIsOffset, sizeof(symbolIsOffset));
         writeUniform(uniforms, *specification, "u_size_t", &symbolSizeT, sizeof(symbolSizeT));
         writeUniform(uniforms, *specification, "u_size", &symbolSize, sizeof(symbolSize));
@@ -4423,13 +4723,33 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
         writeUniform(uniforms, *specification, "u_gamma_scale", &symbolGammaScale, sizeof(symbolGammaScale));
     } else if (collisionCircleDrawable) {
         const float cameraToCenterDistance = parameters.state.getCameraToCenterDistance();
-        writeUniform(uniforms, *specification, "u_extrude_scale", collisionExtrudeScale.data(), collisionExtrudeScale.size() * sizeof(float));
-        writeUniform(uniforms, *specification, "u_camera_to_center_distance", &cameraToCenterDistance, sizeof(cameraToCenterDistance));
-        writeUniform(uniforms, *specification, "u_overscale_factor", &collisionOverscaleFactor, sizeof(collisionOverscaleFactor));
+        writeUniform(uniforms,
+                     *specification,
+                     "u_extrude_scale",
+                     collisionExtrudeScale.data(),
+                     collisionExtrudeScale.size() * sizeof(float));
+        writeUniform(uniforms,
+                     *specification,
+                     "u_camera_to_center_distance",
+                     &cameraToCenterDistance,
+                     sizeof(cameraToCenterDistance));
+        writeUniform(uniforms,
+                     *specification,
+                     "u_overscale_factor",
+                     &collisionOverscaleFactor,
+                     sizeof(collisionOverscaleFactor));
     } else if (circleDrawable) {
         const float cameraToCenterDistance = parameters.state.getCameraToCenterDistance();
-        writeUniform(uniforms, *specification, "u_extrude_scale", circleExtrudeScale.data(), circleExtrudeScale.size() * sizeof(float));
-        writeUniform(uniforms, *specification, "u_camera_to_center_distance", &cameraToCenterDistance, sizeof(cameraToCenterDistance));
+        writeUniform(uniforms,
+                     *specification,
+                     "u_extrude_scale",
+                     circleExtrudeScale.data(),
+                     circleExtrudeScale.size() * sizeof(float));
+        writeUniform(uniforms,
+                     *specification,
+                     "u_camera_to_center_distance",
+                     &cameraToCenterDistance,
+                     sizeof(cameraToCenterDistance));
         writeUniform(uniforms, *specification, "u_scale_with_map", &circleScaleWithMap, sizeof(circleScaleWithMap));
         writeUniform(uniforms, *specification, "u_pitch_with_map", &circlePitchWithMap, sizeof(circlePitchWithMap));
     } else if (heatmapDrawable) {
@@ -4443,20 +4763,33 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
         writeUniform(uniforms, *specification, "u_world_size", viewport, sizeof(viewport));
         writeUniform(uniforms, *specification, "u_opacity", &heatmapTextureOpacity, sizeof(heatmapTextureOpacity));
     } else if (hillshadePrepareDrawable) {
-        writeUniform(uniforms, *specification, "u_unpack", hillshadeUnpack.data(), hillshadeUnpack.size() * sizeof(float));
-        writeUniform(uniforms, *specification, "u_dimension", hillshadeDimension.data(), hillshadeDimension.size() * sizeof(float));
+        writeUniform(
+            uniforms, *specification, "u_unpack", hillshadeUnpack.data(), hillshadeUnpack.size() * sizeof(float));
+        writeUniform(uniforms,
+                     *specification,
+                     "u_dimension",
+                     hillshadeDimension.data(),
+                     hillshadeDimension.size() * sizeof(float));
         writeUniform(uniforms, *specification, "u_zoom", &hillshadeZoom, sizeof(hillshadeZoom));
     } else if (hillshadeDrawable) {
-        writeUniform(uniforms, *specification, "u_unpack", hillshadeUnpack.data(), hillshadeUnpack.size() * sizeof(float));
+        writeUniform(
+            uniforms, *specification, "u_unpack", hillshadeUnpack.data(), hillshadeUnpack.size() * sizeof(float));
         writeUniform(uniforms, *specification, "u_zoom", &hillshadeZoom, sizeof(hillshadeZoom));
-        writeUniform(uniforms, *specification, "u_latrange", hillshadeLatrange.data(), hillshadeLatrange.size() * sizeof(float));
+        writeUniform(
+            uniforms, *specification, "u_latrange", hillshadeLatrange.data(), hillshadeLatrange.size() * sizeof(float));
         writeUniform(uniforms, *specification, "u_exaggeration", &hillshadeExaggeration, sizeof(hillshadeExaggeration));
         writeUniform(uniforms, *specification, "u_prepared", &hillshadePrepared, sizeof(hillshadePrepared));
         writeUniform(uniforms, *specification, "u_method", &hillshadeMethod, sizeof(hillshadeMethod));
         writeUniform(uniforms, *specification, "u_num_lights", &hillshadeNumLights, sizeof(hillshadeNumLights));
-        writeUniform(uniforms, *specification, "u_accent", hillshadeAccent.data(), hillshadeAccent.size() * sizeof(float));
-        writeUniform(uniforms, *specification, "u_altitudes", hillshadeAltitudes.data(), hillshadeAltitudes.size() * sizeof(float));
-        writeUniform(uniforms, *specification, "u_azimuths", hillshadeAzimuths.data(), hillshadeAzimuths.size() * sizeof(float));
+        writeUniform(
+            uniforms, *specification, "u_accent", hillshadeAccent.data(), hillshadeAccent.size() * sizeof(float));
+        writeUniform(uniforms,
+                     *specification,
+                     "u_altitudes",
+                     hillshadeAltitudes.data(),
+                     hillshadeAltitudes.size() * sizeof(float));
+        writeUniform(
+            uniforms, *specification, "u_azimuths", hillshadeAzimuths.data(), hillshadeAzimuths.size() * sizeof(float));
         writeUniform(uniforms, *specification, "u_shadow0", hillshadeShadows.data(), sizeof(float) * 4);
         writeUniform(uniforms, *specification, "u_shadow1", hillshadeShadows.data() + 4, sizeof(float) * 4);
         writeUniform(uniforms, *specification, "u_shadow2", hillshadeShadows.data() + 8, sizeof(float) * 4);
@@ -4466,54 +4799,119 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
         writeUniform(uniforms, *specification, "u_highlight2", hillshadeHighlights.data() + 8, sizeof(float) * 4);
         writeUniform(uniforms, *specification, "u_highlight3", hillshadeHighlights.data() + 12, sizeof(float) * 4);
     } else if (colorReliefDrawable) {
-        writeUniform(uniforms, *specification, "u_unpack", colorReliefUnpack.data(), colorReliefUnpack.size() * sizeof(float));
-        writeUniform(uniforms, *specification, "u_dimension", colorReliefDimension.data(), colorReliefDimension.size() * sizeof(float));
+        writeUniform(
+            uniforms, *specification, "u_unpack", colorReliefUnpack.data(), colorReliefUnpack.size() * sizeof(float));
+        writeUniform(uniforms,
+                     *specification,
+                     "u_dimension",
+                     colorReliefDimension.data(),
+                     colorReliefDimension.size() * sizeof(float));
         writeUniform(uniforms, *specification, "u_color_ramp_size", &colorReliefRampSize, sizeof(colorReliefRampSize));
         writeUniform(uniforms, *specification, "u_opacity", &colorReliefOpacity, sizeof(colorReliefOpacity));
         const float defaultElevationMin = 0.0f;
         const float defaultElevationScale = 1.0f;
         writeUniform(uniforms, *specification, "u_elevation_min", &defaultElevationMin, sizeof(defaultElevationMin));
-        writeUniform(uniforms, *specification, "u_elevation_scale", &defaultElevationScale, sizeof(defaultElevationScale));
+        writeUniform(
+            uniforms, *specification, "u_elevation_scale", &defaultElevationScale, sizeof(defaultElevationScale));
     } else if (rasterDrawable) {
-        writeUniform(uniforms, *specification, "u_tl_parent", rasterTlParent.data(), rasterTlParent.size() * sizeof(float));
+        writeUniform(
+            uniforms, *specification, "u_tl_parent", rasterTlParent.data(), rasterTlParent.size() * sizeof(float));
         writeUniform(uniforms, *specification, "u_scale_parent", &rasterScaleParent, sizeof(rasterScaleParent));
         writeUniform(uniforms, *specification, "u_buffer_scale", &rasterBufferScale, sizeof(rasterBufferScale));
-        writeUniform(uniforms, *specification, "u_spin_weights", rasterSpinWeights.data(), rasterSpinWeights.size() * sizeof(float));
+        writeUniform(uniforms,
+                     *specification,
+                     "u_spin_weights",
+                     rasterSpinWeights.data(),
+                     rasterSpinWeights.size() * sizeof(float));
         writeUniform(uniforms, *specification, "u_fade_t", &rasterFadeT, sizeof(rasterFadeT));
         writeUniform(uniforms, *specification, "u_opacity", &rasterOpacity, sizeof(rasterOpacity));
         writeUniform(uniforms, *specification, "u_brightness_low", &rasterBrightnessLow, sizeof(rasterBrightnessLow));
-        writeUniform(uniforms, *specification, "u_brightness_high", &rasterBrightnessHigh, sizeof(rasterBrightnessHigh));
-        writeUniform(uniforms, *specification, "u_saturation_factor", &rasterSaturationFactor, sizeof(rasterSaturationFactor));
-        writeUniform(uniforms, *specification, "u_contrast_factor", &rasterContrastFactor, sizeof(rasterContrastFactor));
+        writeUniform(
+            uniforms, *specification, "u_brightness_high", &rasterBrightnessHigh, sizeof(rasterBrightnessHigh));
+        writeUniform(
+            uniforms, *specification, "u_saturation_factor", &rasterSaturationFactor, sizeof(rasterSaturationFactor));
+        writeUniform(
+            uniforms, *specification, "u_contrast_factor", &rasterContrastFactor, sizeof(rasterContrastFactor));
     } else if (fillExtrusionPatternDrawable) {
         writeUniform(uniforms, *specification, "u_fade", &fillPatternFade, sizeof(fillPatternFade));
         writeUniform(uniforms, *specification, "u_opacity", &fillExtrusionOpacity, sizeof(fillExtrusionOpacity));
     } else if (fillPatternDrawable) {
         const float pixelRatio = parameters.pixelRatio;
-        writeUniform(uniforms, *specification, "u_pixel_coord_upper", fillPatternPixelCoordUpper.data(), fillPatternPixelCoordUpper.size() * sizeof(float));
-        writeUniform(uniforms, *specification, "u_pixel_coord_lower", fillPatternPixelCoordLower.data(), fillPatternPixelCoordLower.size() * sizeof(float));
+        writeUniform(uniforms,
+                     *specification,
+                     "u_pixel_coord_upper",
+                     fillPatternPixelCoordUpper.data(),
+                     fillPatternPixelCoordUpper.size() * sizeof(float));
+        writeUniform(uniforms,
+                     *specification,
+                     "u_pixel_coord_lower",
+                     fillPatternPixelCoordLower.data(),
+                     fillPatternPixelCoordLower.size() * sizeof(float));
         writeUniform(uniforms, *specification, "u_tile_ratio", &fillPatternTileRatio, sizeof(fillPatternTileRatio));
-        writeUniform(uniforms, *specification, "u_pattern_from", fillPatternFrom.data(), fillPatternFrom.size() * sizeof(float));
-        writeUniform(uniforms, *specification, "u_pattern_to", fillPatternTo.data(), fillPatternTo.size() * sizeof(float));
-        writeUniform(uniforms, *specification, "u_texsize", fillPatternTexsize.data(), fillPatternTexsize.size() * sizeof(float));
+        writeUniform(
+            uniforms, *specification, "u_pattern_from", fillPatternFrom.data(), fillPatternFrom.size() * sizeof(float));
+        writeUniform(
+            uniforms, *specification, "u_pattern_to", fillPatternTo.data(), fillPatternTo.size() * sizeof(float));
+        writeUniform(uniforms,
+                     *specification,
+                     "u_texsize",
+                     fillPatternTexsize.data(),
+                     fillPatternTexsize.size() * sizeof(float));
         writeUniform(uniforms, *specification, "u_fade", &fillPatternFade, sizeof(fillPatternFade));
         writeUniform(uniforms, *specification, "u_from_scale", &fillPatternFromScale, sizeof(fillPatternFromScale));
         writeUniform(uniforms, *specification, "u_to_scale", &fillPatternToScale, sizeof(fillPatternToScale));
         writeUniform(uniforms, *specification, "u_pixel_ratio", &pixelRatio, sizeof(pixelRatio));
     } else if (backgroundPatternDrawable) {
-        writeUniform(uniforms, *specification, "u_pixel_coord_upper", backgroundPatternPixelCoordUpper.data(), backgroundPatternPixelCoordUpper.size() * sizeof(float));
-        writeUniform(uniforms, *specification, "u_pixel_coord_lower", backgroundPatternPixelCoordLower.data(), backgroundPatternPixelCoordLower.size() * sizeof(float));
-        writeUniform(uniforms, *specification, "u_tile_units_to_pixels", &backgroundPatternTileUnitsToPixels, sizeof(backgroundPatternTileUnitsToPixels));
-        writeUniform(uniforms, *specification, "u_pattern_tl_a", backgroundPatternTlA.data(), backgroundPatternTlA.size() * sizeof(float));
-        writeUniform(uniforms, *specification, "u_pattern_br_a", backgroundPatternBrA.data(), backgroundPatternBrA.size() * sizeof(float));
-        writeUniform(uniforms, *specification, "u_pattern_tl_b", backgroundPatternTlB.data(), backgroundPatternTlB.size() * sizeof(float));
-        writeUniform(uniforms, *specification, "u_pattern_br_b", backgroundPatternBrB.data(), backgroundPatternBrB.size() * sizeof(float));
-        writeUniform(uniforms, *specification, "u_pattern_size_a", backgroundPatternSizeA.data(), backgroundPatternSizeA.size() * sizeof(float));
-        writeUniform(uniforms, *specification, "u_pattern_size_b", backgroundPatternSizeB.data(), backgroundPatternSizeB.size() * sizeof(float));
+        writeUniform(uniforms,
+                     *specification,
+                     "u_pixel_coord_upper",
+                     backgroundPatternPixelCoordUpper.data(),
+                     backgroundPatternPixelCoordUpper.size() * sizeof(float));
+        writeUniform(uniforms,
+                     *specification,
+                     "u_pixel_coord_lower",
+                     backgroundPatternPixelCoordLower.data(),
+                     backgroundPatternPixelCoordLower.size() * sizeof(float));
+        writeUniform(uniforms,
+                     *specification,
+                     "u_tile_units_to_pixels",
+                     &backgroundPatternTileUnitsToPixels,
+                     sizeof(backgroundPatternTileUnitsToPixels));
+        writeUniform(uniforms,
+                     *specification,
+                     "u_pattern_tl_a",
+                     backgroundPatternTlA.data(),
+                     backgroundPatternTlA.size() * sizeof(float));
+        writeUniform(uniforms,
+                     *specification,
+                     "u_pattern_br_a",
+                     backgroundPatternBrA.data(),
+                     backgroundPatternBrA.size() * sizeof(float));
+        writeUniform(uniforms,
+                     *specification,
+                     "u_pattern_tl_b",
+                     backgroundPatternTlB.data(),
+                     backgroundPatternTlB.size() * sizeof(float));
+        writeUniform(uniforms,
+                     *specification,
+                     "u_pattern_br_b",
+                     backgroundPatternBrB.data(),
+                     backgroundPatternBrB.size() * sizeof(float));
+        writeUniform(uniforms,
+                     *specification,
+                     "u_pattern_size_a",
+                     backgroundPatternSizeA.data(),
+                     backgroundPatternSizeA.size() * sizeof(float));
+        writeUniform(uniforms,
+                     *specification,
+                     "u_pattern_size_b",
+                     backgroundPatternSizeB.data(),
+                     backgroundPatternSizeB.size() * sizeof(float));
         writeUniform(uniforms, *specification, "u_scale_a", &backgroundPatternScaleA, sizeof(backgroundPatternScaleA));
         writeUniform(uniforms, *specification, "u_scale_b", &backgroundPatternScaleB, sizeof(backgroundPatternScaleB));
         writeUniform(uniforms, *specification, "u_mix", &backgroundPatternMix, sizeof(backgroundPatternMix));
-        writeUniform(uniforms, *specification, "u_opacity", &backgroundPatternOpacity, sizeof(backgroundPatternOpacity));
+        writeUniform(
+            uniforms, *specification, "u_opacity", &backgroundPatternOpacity, sizeof(backgroundPatternOpacity));
     }
 
     std::array<SkMesh::ChildPtr, 3> children;
@@ -4535,16 +4933,16 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
         if (!glyphImage || !iconImage) {
             return;
         }
-        const auto glyphFilterMode = glyphTexture.getSamplerState().filter == gfx::TextureFilterType::Nearest ? SkFilterMode::kNearest
-                                                                                                              : SkFilterMode::kLinear;
-        const auto iconFilterMode = iconTexture.getSamplerState().filter == gfx::TextureFilterType::Nearest ? SkFilterMode::kNearest
-                                                                                                            : SkFilterMode::kLinear;
-        auto glyphShader = glyphImage->makeShader(SkTileMode::kClamp,
-                                                  SkTileMode::kClamp,
-                                                  SkSamplingOptions(glyphFilterMode));
-        auto iconShader = iconImage->makeShader(SkTileMode::kClamp,
-                                                SkTileMode::kClamp,
-                                                SkSamplingOptions(iconFilterMode));
+        const auto glyphFilterMode = glyphTexture.getSamplerState().filter == gfx::TextureFilterType::Nearest
+                                         ? SkFilterMode::kNearest
+                                         : SkFilterMode::kLinear;
+        const auto iconFilterMode = iconTexture.getSamplerState().filter == gfx::TextureFilterType::Nearest
+                                        ? SkFilterMode::kNearest
+                                        : SkFilterMode::kLinear;
+        auto glyphShader = glyphImage->makeShader(
+            SkTileMode::kClamp, SkTileMode::kClamp, SkSamplingOptions(glyphFilterMode));
+        auto iconShader = iconImage->makeShader(
+            SkTileMode::kClamp, SkTileMode::kClamp, SkSamplingOptions(iconFilterMode));
         if (!glyphShader || !iconShader) {
             return;
         }
@@ -4564,11 +4962,10 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
         if (!image) {
             return;
         }
-        const auto filterMode = texture.getSamplerState().filter == gfx::TextureFilterType::Nearest ? SkFilterMode::kNearest
-                                                                                                     : SkFilterMode::kLinear;
-        auto imageShader = image->makeShader(SkTileMode::kClamp,
-                                             SkTileMode::kClamp,
-                                             SkSamplingOptions(filterMode));
+        const auto filterMode = texture.getSamplerState().filter == gfx::TextureFilterType::Nearest
+                                    ? SkFilterMode::kNearest
+                                    : SkFilterMode::kLinear;
+        auto imageShader = image->makeShader(SkTileMode::kClamp, SkTileMode::kClamp, SkSamplingOptions(filterMode));
         if (!imageShader) {
             return;
         }
@@ -4589,12 +4986,10 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
         }
         const float imageSize[2] = {static_cast<float>(image->width()), static_cast<float>(image->height())};
         writeUniform(uniforms, *specification, "u_image_size", imageSize, sizeof(imageSize));
-        auto imageShader = image->makeRawShader(SkTileMode::kClamp,
-                                                SkTileMode::kClamp,
-                                                SkSamplingOptions(SkFilterMode::kLinear));
-        auto rampShader = ramp->makeRawShader(SkTileMode::kClamp,
-                                              SkTileMode::kClamp,
-                                              SkSamplingOptions(SkFilterMode::kLinear));
+        auto imageShader = image->makeRawShader(
+            SkTileMode::kClamp, SkTileMode::kClamp, SkSamplingOptions(SkFilterMode::kLinear));
+        auto rampShader = ramp->makeRawShader(
+            SkTileMode::kClamp, SkTileMode::kClamp, SkSamplingOptions(SkFilterMode::kLinear));
         if (!imageShader || !rampShader) {
             return;
         }
@@ -4615,12 +5010,12 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
         }
         const float dimensions[2] = {static_cast<float>(image->width()), static_cast<float>(image->height())};
         writeUniform(uniforms, *specification, "u_dimension", dimensions, sizeof(dimensions));
-        const auto filterMode = hillshadeDrawable && hillshadeOverzoom ? SkFilterMode::kLinear
-                                : (texture.getSamplerState().filter == gfx::TextureFilterType::Nearest ? SkFilterMode::kNearest
-                                                                                                        : SkFilterMode::kLinear);
-        auto imageShader = image->makeRawShader(SkTileMode::kClamp,
-                                                SkTileMode::kClamp,
-                                                SkSamplingOptions(filterMode));
+        const auto filterMode = hillshadeDrawable && hillshadeOverzoom
+                                    ? SkFilterMode::kLinear
+                                    : (texture.getSamplerState().filter == gfx::TextureFilterType::Nearest
+                                           ? SkFilterMode::kNearest
+                                           : SkFilterMode::kLinear);
+        auto imageShader = image->makeRawShader(SkTileMode::kClamp, SkTileMode::kClamp, SkSamplingOptions(filterMode));
         if (!imageShader) {
             return;
         }
@@ -4663,22 +5058,20 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
             normalizedElevationStops[i * 4] = (elevationStops[i] - elevationMin) * elevationScale;
             normalizedElevationStops[i * 4 + 3] = 1.0f;
         }
-        SkPixmap elevationPixmap(SkImageInfo::Make(static_cast<int>(stopCount), 1, kRGBA_F32_SkColorType, kPremul_SkAlphaType),
-                                 normalizedElevationStops.data(),
-                                 stopCount * sizeof(float) * 4);
+        SkPixmap elevationPixmap(
+            SkImageInfo::Make(static_cast<int>(stopCount), 1, kRGBA_F32_SkColorType, kPremul_SkAlphaType),
+            normalizedElevationStops.data(),
+            stopCount * sizeof(float) * 4);
         auto normalizedElevationImage = SkImages::RasterFromPixmapCopy(elevationPixmap);
         if (!normalizedElevationImage) {
             return;
         }
-        auto demShader = demImage->makeRawShader(SkTileMode::kClamp,
-                                                  SkTileMode::kClamp,
-                                                  SkSamplingOptions(SkFilterMode::kLinear));
-        auto elevationShader = normalizedElevationImage->makeRawShader(SkTileMode::kClamp,
-                                                                       SkTileMode::kClamp,
-                                                                       SkSamplingOptions(SkFilterMode::kNearest));
-        auto colorShader = colorImage->makeShader(SkTileMode::kClamp,
-                                                   SkTileMode::kClamp,
-                                                   SkSamplingOptions(SkFilterMode::kLinear));
+        auto demShader = demImage->makeRawShader(
+            SkTileMode::kClamp, SkTileMode::kClamp, SkSamplingOptions(SkFilterMode::kLinear));
+        auto elevationShader = normalizedElevationImage->makeRawShader(
+            SkTileMode::kClamp, SkTileMode::kClamp, SkSamplingOptions(SkFilterMode::kNearest));
+        auto colorShader = colorImage->makeShader(
+            SkTileMode::kClamp, SkTileMode::kClamp, SkSamplingOptions(SkFilterMode::kLinear));
         if (!demShader || !elevationShader || !colorShader) {
             return;
         }
@@ -4707,14 +5100,11 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
         const float texsize1[2] = {static_cast<float>(image1->width()), static_cast<float>(image1->height())};
         writeUniform(uniforms, *specification, "u_texsize0", texsize0, sizeof(texsize0));
         writeUniform(uniforms, *specification, "u_texsize1", texsize1, sizeof(texsize1));
-        const auto filterMode = texture0.getSamplerState().filter == gfx::TextureFilterType::Nearest ? SkFilterMode::kNearest
-                                                                                                      : SkFilterMode::kLinear;
-        auto image0Shader = image0->makeShader(SkTileMode::kClamp,
-                                               SkTileMode::kClamp,
-                                               SkSamplingOptions(filterMode));
-        auto image1Shader = image1->makeShader(SkTileMode::kClamp,
-                                               SkTileMode::kClamp,
-                                               SkSamplingOptions(filterMode));
+        const auto filterMode = texture0.getSamplerState().filter == gfx::TextureFilterType::Nearest
+                                    ? SkFilterMode::kNearest
+                                    : SkFilterMode::kLinear;
+        auto image0Shader = image0->makeShader(SkTileMode::kClamp, SkTileMode::kClamp, SkSamplingOptions(filterMode));
+        auto image1Shader = image1->makeShader(SkTileMode::kClamp, SkTileMode::kClamp, SkSamplingOptions(filterMode));
         if (!image0Shader || !image1Shader) {
             return;
         }
@@ -4733,9 +5123,8 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
         if (!image) {
             return;
         }
-        auto imageShader = image->makeShader(SkTileMode::kClamp,
-                                             SkTileMode::kClamp,
-                                             SkSamplingOptions(SkFilterMode::kLinear));
+        auto imageShader = image->makeShader(
+            SkTileMode::kClamp, SkTileMode::kClamp, SkSamplingOptions(SkFilterMode::kLinear));
         if (!imageShader) {
             return;
         }
@@ -4753,9 +5142,8 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
         if (!image) {
             return;
         }
-        auto imageShader = image->makeShader(SkTileMode::kClamp,
-                                             SkTileMode::kClamp,
-                                             SkSamplingOptions(SkFilterMode::kLinear));
+        auto imageShader = image->makeShader(
+            SkTileMode::kClamp, SkTileMode::kClamp, SkSamplingOptions(SkFilterMode::kLinear));
         if (!imageShader) {
             return;
         }
@@ -4773,9 +5161,8 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
         if (!image) {
             return;
         }
-        auto imageShader = image->makeShader(SkTileMode::kClamp,
-                                             SkTileMode::kClamp,
-                                             SkSamplingOptions(SkFilterMode::kLinear));
+        auto imageShader = image->makeShader(
+            SkTileMode::kClamp, SkTileMode::kClamp, SkSamplingOptions(SkFilterMode::kLinear));
         if (!imageShader) {
             return;
         }
@@ -4816,10 +5203,26 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
             if (!tileProps) {
                 return;
             }
-            writeUniform(uniforms, *specification, "u_pattern_from", tileProps->pattern_from.data(), tileProps->pattern_from.size() * sizeof(float));
-            writeUniform(uniforms, *specification, "u_pattern_to", tileProps->pattern_to.data(), tileProps->pattern_to.size() * sizeof(float));
-            writeUniform(uniforms, *specification, "u_pattern_scale", tileProps->scale.data(), tileProps->scale.size() * sizeof(float));
-            writeUniform(uniforms, *specification, "u_texsize", tileProps->texsize.data(), tileProps->texsize.size() * sizeof(float));
+            writeUniform(uniforms,
+                         *specification,
+                         "u_pattern_from",
+                         tileProps->pattern_from.data(),
+                         tileProps->pattern_from.size() * sizeof(float));
+            writeUniform(uniforms,
+                         *specification,
+                         "u_pattern_to",
+                         tileProps->pattern_to.data(),
+                         tileProps->pattern_to.size() * sizeof(float));
+            writeUniform(uniforms,
+                         *specification,
+                         "u_pattern_scale",
+                         tileProps->scale.data(),
+                         tileProps->scale.size() * sizeof(float));
+            writeUniform(uniforms,
+                         *specification,
+                         "u_texsize",
+                         tileProps->texsize.data(),
+                         tileProps->texsize.size() * sizeof(float));
             writeUniform(uniforms, *specification, "u_fade", &tileProps->fade, sizeof(tileProps->fade));
         } else if (lineSDFDrawable) {
             const shaders::LineSDFDrawableUBO* sdfDrawable = nullptr;
@@ -4844,8 +5247,16 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
                 return;
             }
             const float sdfTextureSize[2] = {static_cast<float>(image->width()), static_cast<float>(image->height())};
-            writeUniform(uniforms, *specification, "u_patternscale_a", sdfDrawable->patternscale_a.data(), sdfDrawable->patternscale_a.size() * sizeof(float));
-            writeUniform(uniforms, *specification, "u_patternscale_b", sdfDrawable->patternscale_b.data(), sdfDrawable->patternscale_b.size() * sizeof(float));
+            writeUniform(uniforms,
+                         *specification,
+                         "u_patternscale_a",
+                         sdfDrawable->patternscale_a.data(),
+                         sdfDrawable->patternscale_a.size() * sizeof(float));
+            writeUniform(uniforms,
+                         *specification,
+                         "u_patternscale_b",
+                         sdfDrawable->patternscale_b.data(),
+                         sdfDrawable->patternscale_b.size() * sizeof(float));
             writeUniform(uniforms, *specification, "u_tex_y_a", &sdfDrawable->tex_y_a, sizeof(sdfDrawable->tex_y_a));
             writeUniform(uniforms, *specification, "u_tex_y_b", &sdfDrawable->tex_y_b, sizeof(sdfDrawable->tex_y_b));
             writeUniform(uniforms, *specification, "u_sdfgamma", &tileProps->sdfgamma, sizeof(tileProps->sdfgamma));
@@ -4900,10 +5311,10 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
                                               seg.vertexOffset * sizeof(MeshVertex),
                                               indexBuffer,
                                               end - seg.indexOffset,
-                                               seg.indexOffset * sizeof(std::uint16_t),
-                                               uniforms,
-                                               SkSpan<SkMesh::ChildPtr>(children.data(), childCount),
-                                               conservativeMeshBounds());
+                                              seg.indexOffset * sizeof(std::uint16_t),
+                                              uniforms,
+                                              SkSpan<SkMesh::ChildPtr>(children.data(), childCount),
+                                              conservativeMeshBounds());
         if (mesh.mesh.isValid()) {
             canvas->drawMesh(mesh.mesh, SkBlender::Mode(SkBlendMode::kDst), paint);
         }
@@ -4911,11 +5322,11 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
 }
 
 void Drawable::updateVertexAttributes(gfx::VertexAttributeArrayPtr attributes,
-                                       std::size_t vertexCount_,
-                                       gfx::DrawMode mode,
-                                       gfx::IndexVectorBasePtr indexes,
-                                       const SegmentBase* segments_,
-                                       std::size_t segmentCount) {
+                                      std::size_t vertexCount_,
+                                      gfx::DrawMode mode,
+                                      gfx::IndexVectorBasePtr indexes,
+                                      const SegmentBase* segments_,
+                                      std::size_t segmentCount) {
     setVertexAttributes(std::move(attributes));
     sharedIndexes = std::move(indexes);
     vertexCount = vertexCount_;
@@ -4930,7 +5341,9 @@ void Drawable::updateVertexAttributes(gfx::VertexAttributeArrayPtr attributes,
     }
 }
 
-void Drawable::setVertices(std::vector<std::uint8_t>&& vertices_, std::size_t vertexCount_, gfx::AttributeDataType type) {
+void Drawable::setVertices(std::vector<std::uint8_t>&& vertices_,
+                           std::size_t vertexCount_,
+                           gfx::AttributeDataType type) {
     vertices = std::move(vertices_);
     vertexCount = vertexCount_;
     vertexDataType = type;
@@ -4942,15 +5355,18 @@ std::vector<gfx::VertexAttribute::float2> Drawable::readPackedPositionsForTests(
         vertexReader = VertexReader{vertices.data(), vertexCount, sizeof(std::int16_t) * 2};
     } else if (const auto& attrs = getVertexAttributes()) {
         const auto& attr = attrs->get(positionAttributeId);
-        if (attr && attr->getSharedRawData() && (attr->getSharedType() == gfx::AttributeDataType::Short2 ||
-                                                attr->getSharedType() == gfx::AttributeDataType::Short4) &&
+        if (attr && attr->getSharedRawData() &&
+            (attr->getSharedType() == gfx::AttributeDataType::Short2 ||
+             attr->getSharedType() == gfx::AttributeDataType::Short4) &&
             attr->getSharedRawData()->getRawCount() >= attr->getSharedVertexOffset()) {
             const auto* raw = static_cast<const std::uint8_t*>(attr->getSharedRawData()->getRawData());
-            vertexReader = VertexReader{raw + attr->getSharedOffset() + attr->getSharedVertexOffset() * attr->getSharedStride(),
-                                        vertexCount ? vertexCount : attr->getSharedRawData()->getRawCount() - attr->getSharedVertexOffset(),
-                                        attr->getSharedStride()};
-        } else if (attr && (attr->getDataType() == gfx::AttributeDataType::Short2 ||
-                            attr->getDataType() == gfx::AttributeDataType::Short4) &&
+            vertexReader = VertexReader{
+                raw + attr->getSharedOffset() + attr->getSharedVertexOffset() * attr->getSharedStride(),
+                vertexCount ? vertexCount : attr->getSharedRawData()->getRawCount() - attr->getSharedVertexOffset(),
+                attr->getSharedStride()};
+        } else if (attr &&
+                   (attr->getDataType() == gfx::AttributeDataType::Short2 ||
+                    attr->getDataType() == gfx::AttributeDataType::Short4) &&
                    !attr->getRawData().empty()) {
             const auto stride = attr->getDataType() == gfx::AttributeDataType::Short4 ? sizeof(std::int16_t) * 4
                                                                                       : sizeof(std::int16_t) * 2;
