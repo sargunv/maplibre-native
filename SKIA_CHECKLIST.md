@@ -1,7 +1,5 @@
 # Skia Rendering Backend Checklist
 
-Status: Skia builds; clipping/blend, core fill/circle/raster, stretchable icons, line gradient/blur/offset, fill-extrusion base/height/pattern, core heatmap paths, collision debug geometry, broad symbol basics, and most hillshade combinations are validated, with advanced parity still in progress.
-
 - [x] Define Skia backend project scope and architecture in `SKIA_RESEARCH.md`.
 - [x] Add `MLN_WITH_SKIA` build option.
 - [x] Add Skia to backend option validation.
