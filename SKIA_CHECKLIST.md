@@ -86,13 +86,13 @@
 - [ ] Implement blend state mapping from `gfx::ColorMode` to Skia paint/blend configuration.
 - [ ] Implement cull-face support or document no-op behavior for 2D layers.
 - [ ] Implement depth mode support or document no-op/degraded behavior for 2D layers.
-- [ ] Implement tile clipping with Skia canvas clip stack.
-- [ ] Replace stencil tile clipping with Skia clip path/rect behavior in `TileLayerGroup`.
+- [x] Implement tile clipping with Skia canvas clip stack.
+- [x] Replace stencil tile clipping with Skia clip path/rect behavior in `TileLayerGroup`.
 - [ ] Implement debug group/signpost behavior with Skia tracing where available.
 - [x] Add Skia shader program base type.
 - [x] Add Skia shader group type.
 - [x] Add Skia shader registration in `RendererBackend::initShaders`.
-- [ ] Port clipping mask shader behavior or remove stencil dependency from Skia path.
+- [x] Port clipping mask shader behavior or remove stencil dependency from Skia path.
 - [x] Port background solid shader/render path.
 - [x] Port background pattern shader/render path.
 - [x] Port fill solid shader/render path.
