@@ -10,10 +10,19 @@
 #include <mbgl/gfx/draw_mode.hpp>
 #include <mbgl/gfx/vertex_attribute.hpp>
 #include <mbgl/gfx/vertex_vector.hpp>
+#include <mbgl/util/constants.hpp>
+
+#include <include/core/SkCanvas.h>
+#include <include/core/SkColor.h>
+#include <include/core/SkImageInfo.h>
+#include <include/core/SkPaint.h>
+#include <include/core/SkRect.h>
+#include <include/core/SkSurface.h>
 
 #include <array>
 #include <cstddef>
 #include <cstring>
+#include <limits>
 
 namespace mbgl {
 namespace skia {
@@ -164,6 +173,46 @@ TEST(SkiaResource, UniformBufferArrayCreateOrUpdate) {
     EXPECT_NE(second.get(), third.get());
     EXPECT_EQ(larger.size(), third->getSize());
     EXPECT_EQ(std::vector<std::uint8_t>(larger.begin(), larger.end()), third->data());
+}
+
+TEST(SkiaResource, TileClipConstrainsCanvasDrawing) {
+    auto surface = SkSurfaces::Raster(SkImageInfo::Make(4, 2, kRGBA_8888_SkColorType, kPremul_SkAlphaType));
+    ASSERT_TRUE(surface);
+    auto* canvas = surface->getCanvas();
+    ASSERT_NE(nullptr, canvas);
+
+    canvas->clear(SK_ColorBLUE);
+
+    mat4 matrix = {0.0};
+    matrix[0] = 1.0 / util::EXTENT;
+    matrix[5] = -2.0 / util::EXTENT;
+    matrix[12] = -1.0;
+    matrix[13] = 1.0;
+    matrix[15] = 1.0;
+
+    canvas->save();
+    EXPECT_TRUE(clipCanvasToTileForTests(*canvas, matrix, {4, 2}));
+
+    SkPaint paint;
+    paint.setColor(SK_ColorRED);
+    canvas->drawRect(SkRect::MakeWH(4.0f, 2.0f), paint);
+    canvas->restore();
+
+    std::array<std::uint8_t, 4 * 2 * 4> pixels{};
+    ASSERT_TRUE(surface->readPixels(
+        SkImageInfo::Make(4, 2, kRGBA_8888_SkColorType, kPremul_SkAlphaType), pixels.data(), 4 * 4, 0, 0));
+
+    EXPECT_EQ((std::array<std::uint8_t, 4>{255, 0, 0, 255}),
+              (std::array<std::uint8_t, 4>{pixels[0], pixels[1], pixels[2], pixels[3]}));
+    const auto rightPixelOffset = std::size_t{3} * 4;
+    EXPECT_EQ((std::array<std::uint8_t, 4>{0, 0, 255, 255}),
+              (std::array<std::uint8_t, 4>{pixels[rightPixelOffset + 0],
+                                           pixels[rightPixelOffset + 1],
+                                           pixels[rightPixelOffset + 2],
+                                           pixels[rightPixelOffset + 3]}));
+
+    matrix[0] = std::numeric_limits<double>::infinity();
+    EXPECT_FALSE(clipCanvasToTileForTests(*canvas, matrix, {4, 2}));
 }
 
 } // namespace

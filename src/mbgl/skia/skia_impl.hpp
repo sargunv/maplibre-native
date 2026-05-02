@@ -37,6 +37,7 @@ namespace mbgl {
 namespace skia {
 
 sk_sp<GrDirectContext> makeDefaultGaneshContext();
+bool clipCanvasToTileForTests(SkCanvas&, const mat4&, Size);
 
 class BufferResource final : public gfx::VertexBufferResource, public gfx::IndexBufferResource {
 public:

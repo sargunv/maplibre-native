@@ -159,7 +159,7 @@
 - [x] Add targeted unit tests for texture upload and offscreen readback.
 - [x] Add targeted unit tests for vertex attribute packing.
 - [x] Add targeted unit tests for uniform buffer packing.
-- [ ] Add targeted unit tests for tile clipping behavior.
+- [x] Add targeted unit tests for tile clipping behavior.
 - [ ] Profile tile-heavy styles against existing backends.
 - [ ] Profile text-heavy styles against existing backends.
 - [ ] Profile raster-heavy styles against existing backends.

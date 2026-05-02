@@ -23,25 +23,20 @@ std::array<float, 2> projectToScreen(const mat4& matrix, const float viewport[2]
     const auto invW = clipW == 0.0 ? 1.0 : 1.0 / clipW;
     const auto ndcX = clipX * invW;
     const auto ndcY = clipY * invW;
-    return {static_cast<float>((ndcX * 0.5 + 0.5) * viewport[0]),
-            static_cast<float>((0.5 - ndcY * 0.5) * viewport[1])};
+    return {static_cast<float>((ndcX * 0.5 + 0.5) * viewport[0]), static_cast<float>((0.5 - ndcY * 0.5) * viewport[1])};
 }
 
 bool isFinite(const std::array<float, 2>& point) {
     return std::isfinite(point[0]) && std::isfinite(point[1]);
 }
 
-std::optional<SkPath> tileClipPath(const PaintParameters& parameters, const UnwrappedTileID& tileID) {
-    const auto matrix = parameters.matrixForTile(tileID);
-    const float viewport[2] = {static_cast<float>(parameters.state.getSize().width),
-                               static_cast<float>(parameters.state.getSize().height)};
+std::optional<SkPath> tileClipPath(const mat4& matrix, const Size size) {
+    const float viewport[2] = {static_cast<float>(size.width), static_cast<float>(size.height)};
 
     const auto topLeft = projectToScreen(matrix, viewport, 0.0f, 0.0f);
     const auto topRight = projectToScreen(matrix, viewport, static_cast<float>(util::EXTENT), 0.0f);
-    const auto bottomRight = projectToScreen(matrix,
-                                             viewport,
-                                             static_cast<float>(util::EXTENT),
-                                             static_cast<float>(util::EXTENT));
+    const auto bottomRight = projectToScreen(
+        matrix, viewport, static_cast<float>(util::EXTENT), static_cast<float>(util::EXTENT));
     const auto bottomLeft = projectToScreen(matrix, viewport, 0.0f, static_cast<float>(util::EXTENT));
     if (!isFinite(topLeft) || !isFinite(topRight) || !isFinite(bottomRight) || !isFinite(bottomLeft)) {
         return std::nullopt;
@@ -52,6 +47,10 @@ std::optional<SkPath> tileClipPath(const PaintParameters& parameters, const Unwr
                                            SkPoint::Make(bottomRight[0], bottomRight[1]),
                                            SkPoint::Make(bottomLeft[0], bottomLeft[1])};
     return SkPath::Polygon(points, true);
+}
+
+std::optional<SkPath> tileClipPath(const PaintParameters& parameters, const UnwrappedTileID& tileID) {
+    return tileClipPath(parameters.matrixForTile(tileID), parameters.state.getSize());
 }
 
 void drawWithTileClip(gfx::Drawable& drawable,
@@ -76,6 +75,15 @@ void drawWithTileClip(gfx::Drawable& drawable,
 }
 
 } // namespace
+
+bool clipCanvasToTileForTests(SkCanvas& canvas, const mat4& matrix, const Size size) {
+    const auto path = tileClipPath(matrix, size);
+    if (!path) {
+        return false;
+    }
+    canvas.clipPath(*path, SkClipOp::kIntersect, true);
+    return true;
+}
 
 TileLayerGroup::TileLayerGroup(int32_t layerIndex, std::size_t initialCapacity, std::string name)
     : mbgl::TileLayerGroup(layerIndex, initialCapacity, std::move(name)),
