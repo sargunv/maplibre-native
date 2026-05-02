@@ -780,7 +780,7 @@ sk_sp<SkMeshSpecification> lineGradientMeshSpecification() {
             float dist = length(varyings.normal) * varyings.width.x;
             float blur = varyings.blur + 1.0;
             float alpha = clamp(min(dist - (varyings.width.y - blur), varyings.width.x - dist) / blur, 0.0, 1.0);
-            float x = clamp(varyings.progress, 0.0, 1.0) * 255.0;
+            float x = clamp(varyings.progress, 0.0, 1.0) * 255.0 + 0.5;
             color = half4(u_gradient.eval(float2(x, 0.5)) * alpha * varyings.color.a);
             return varyings.position;
         }

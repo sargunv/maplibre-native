@@ -120,7 +120,7 @@
 - [x] Pass basic line gap-width render tests.
 - [x] Pass basic line blur render tests.
 - [x] Pass basic line offset render tests.
-- [ ] Pass line gradient render tests. Core gradient/tile-boundary cases pass; translucent remains a small threshold diff.
+- [x] Pass line gradient render tests. Active line-gradient cases pass after matching GL's texel-center gradient-ramp sampling.
 - [x] Pass basic line pattern render tests. Focused line-pattern sweep is 6/8 passing; literal, data-driven property-function/mixed, opacity, step-curve, and zoom-expression pass. Remaining failures are `@2x` threshold differences and pitched vector-tile pattern placement/output.
 - [x] Pass basic line dasharray render tests.
 - [ ] Pass line render tests.
@@ -172,5 +172,5 @@
 - [x] Remove placeholder no-op rendering once SkMesh path is active. Audited remaining Skia no-op methods; active rendering now goes through `SkMesh` or explicit Skia helpers, and remaining empty hooks are documented backend-policy no-ops.
 - [x] Remove temporary Skia smoke targets once render-test coverage is sufficient. Deleted `mbgl-skia-smoke` and `mbgl-skia-map-smoke`; Skia validation now relies on render-test smoke coverage, targeted resource tests, and the GLFW sample build.
 - [x] Remove temporary scaffold comments and dead code. Audited Skia source/header files after smoke target removal; no temporary scaffold comments or dead Skia stubs remain.
-- [ ] Reach parity target for initial 2D layer set. Target: every render test is either already ignored on main, passing with Skia, or failing with a narrowly documented deferral reason. Fill extrusion depth-buffer semantics are the expected acceptable deferral class; other failures are fix-required unless a similarly strong blocker is identified. Current full-suite Skia baseline on 2026-05-02 after collision debug stroke parity: 1255 passed, 12 ignored passed, 79 ignored, and 56 failed.
+- [ ] Reach parity target for initial 2D layer set. Target: every render test is either already ignored on main, passing with Skia, or failing with a narrowly documented deferral reason. Fill extrusion depth-buffer semantics are the expected acceptable deferral class; other failures are fix-required unless a similarly strong blocker is identified. Current full-suite Skia baseline on 2026-05-02 after line-gradient ramp parity: 1256 passed, 12 ignored passed, 79 ignored, and 55 failed.
 - [ ] Decide whether to graduate backend from experimental.
