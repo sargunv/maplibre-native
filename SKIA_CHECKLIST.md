@@ -153,7 +153,7 @@
 - [x] Document fill extrusion support boundaries.
 - [x] Add headless Skia backend for render tests.
 - [ ] Add GLFW or platform sample integration for Skia backend.
-- [ ] Add Skia backend CI configure/build job.
+- [x] Add Skia backend CI configure/build job.
 - [ ] Add Skia backend render-test job once output is meaningful.
 - [ ] Add targeted unit tests for texture upload and offscreen readback.
 - [ ] Add targeted unit tests for vertex attribute packing.

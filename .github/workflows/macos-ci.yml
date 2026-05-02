@@ -93,6 +93,44 @@ jobs:
       - name: Generate Xcode project for macOS
         run: bazel run //platform/macos:xcodeproj --@rules_xcodeproj//xcodeproj:extra_common_flags="--//:renderer=metal"
 
+  skia-cmake:
+    name: macOS Skia
+    runs-on: macos-15
+
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Install dependencies
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: 1
+          HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: 1
+        run: |
+          brew install cmake ninja gn pkg-config python@3.11 libuv icu4c jpeg-turbo webp libpng ccache
+          brew link --overwrite python@3.11
+
+      - name: Configure environment
+        run: |
+          {
+            echo "PKG_CONFIG_PATH=$(brew --prefix icu4c)/lib/pkgconfig:$(brew --prefix libuv)/lib/pkgconfig:${PKG_CONFIG_PATH}"
+            echo "PATH=$(brew --prefix python@3.11)/bin:$PATH"
+            echo "CC=clang"
+            echo "CXX=clang++"
+          } >> "$GITHUB_ENV"
+
+      - name: Configure build
+        run: cmake --preset macos-skia
+
+      - name: Build targets
+        run: |
+          cmake --build build-macos-skia --target \
+            mbgl-core \
+            mbgl-render-test-runner \
+            mbgl-skia-smoke \
+            mbgl-skia-map-smoke
+
   webgpu-cmake:
     name: macOS WebGPU (${{ matrix.variant.name }})
     runs-on: macos-15

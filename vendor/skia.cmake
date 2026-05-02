@@ -12,6 +12,11 @@ if(NOT MLN_WITH_SKIA)
 endif()
 
 include(ExternalProject)
+include(FetchContent)
+
+if(POLICY CMP0169)
+    cmake_policy(SET CMP0169 OLD)
+endif()
 
 set(MLN_SKIA_GIT_VERSION "6b4167b4e2045e0bb559d903f4adea4b42dc6ccb" CACHE STRING "Git ref used when fetching Skia")
 set(MLN_SKIA_ENABLE_GPU ON CACHE BOOL "Build Skia with GPU backends enabled; required for SkMesh rendering")
@@ -21,6 +26,23 @@ message(STATUS "Configuring Skia dependency (${MLN_SKIA_GIT_VERSION})")
 set(_mln_skia_source_dir "${PROJECT_SOURCE_DIR}/vendor/skia")
 set(_mln_skia_build_dir "${CMAKE_BINARY_DIR}/vendor/skia/out")
 set(_mln_skia_library "${_mln_skia_build_dir}/libskia.a")
+
+if(EXISTS "${_mln_skia_source_dir}/LICENSE")
+    set(FETCHCONTENT_SOURCE_DIR_MAPLIBRE_SKIA_SOURCES "${_mln_skia_source_dir}" CACHE PATH "" FORCE)
+endif()
+
+FetchContent_Declare(maplibre_skia_sources
+    GIT_REPOSITORY https://skia.googlesource.com/skia.git
+    GIT_TAG ${MLN_SKIA_GIT_VERSION}
+    GIT_PROGRESS TRUE
+    SOURCE_DIR ${_mln_skia_source_dir}
+)
+
+FetchContent_GetProperties(maplibre_skia_sources)
+if(NOT maplibre_skia_sources_POPULATED)
+    message(STATUS "Fetching Skia sources into ${_mln_skia_source_dir}")
+    FetchContent_Populate(maplibre_skia_sources)
+endif()
 
 find_program(MLN_GN_EXECUTABLE gn REQUIRED)
 find_program(MLN_NINJA_EXECUTABLE ninja REQUIRED)
@@ -121,12 +143,10 @@ string(REPLACE ";" "\n" _mln_skia_gn_args_file_contents "${_mln_skia_gn_args}")
 file(WRITE "${_mln_skia_build_dir}/args.gn" "${_mln_skia_gn_args_file_contents}\n")
 
 ExternalProject_Add(maplibre_skia
-    GIT_REPOSITORY https://skia.googlesource.com/skia.git
-    GIT_TAG ${MLN_SKIA_GIT_VERSION}
-    GIT_SHALLOW TRUE
-    GIT_PROGRESS TRUE
     SOURCE_DIR ${_mln_skia_source_dir}
     BINARY_DIR ${_mln_skia_build_dir}
+    DOWNLOAD_COMMAND ""
+    UPDATE_COMMAND ""
     CONFIGURE_COMMAND ${CMAKE_COMMAND} -E chdir ${_mln_skia_source_dir} ${Python3_EXECUTABLE} tools/git-sync-deps
               COMMAND ${CMAKE_COMMAND} -E chdir ${_mln_skia_source_dir} ${MLN_GN_EXECUTABLE} gen ${_mln_skia_build_dir}
     BUILD_COMMAND ${MLN_NINJA_EXECUTABLE} -C ${_mln_skia_build_dir} skia
