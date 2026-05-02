@@ -16,6 +16,11 @@ namespace skia {
 Renderable::Renderable(Size size_, GrDirectContext* directContext)
     : gfx::Renderable(size_, std::make_unique<RenderableResource>(size_, directContext)) {}
 
+void Renderable::setSize(Size size_, GrDirectContext* directContext) {
+    size = size_;
+    setResource(std::make_unique<RenderableResource>(size_, directContext));
+}
+
 PremultipliedImage Renderable::readStillImage() const {
     PremultipliedImage image(size);
     const auto& resource = getResource<RenderableResource>();
@@ -35,6 +40,10 @@ RendererBackend::~RendererBackend() = default;
 
 gfx::Renderable& RendererBackend::getDefaultRenderable() {
     return defaultRenderable;
+}
+
+void RendererBackend::setSize(Size size_) {
+    defaultRenderable.setSize(size_, directContext.get());
 }
 
 GrDirectContext* RendererBackend::getDirectContext() const {

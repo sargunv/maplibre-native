@@ -93,7 +93,6 @@
       "binaryDir": "${sourceDir}/build-macos-skia",
       "inherits": "macos",
       "cacheVariables": {
-        "MLN_WITH_GLFW": "OFF",
         "MLN_WITH_SKIA": "ON"
       }
     },

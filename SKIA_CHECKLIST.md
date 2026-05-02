@@ -152,7 +152,7 @@
 - [x] Pass active fill extrusion pattern render tests.
 - [x] Document fill extrusion support boundaries.
 - [x] Add headless Skia backend for render tests.
-- [ ] Add GLFW or platform sample integration for Skia backend.
+- [x] Add GLFW or platform sample integration for Skia backend. Current GLFW adapter uses Skia's owned offscreen renderable; native window-surface presentation remains future work.
 - [x] Add Skia backend CI configure/build job.
 - [ ] Add Skia backend render-test job once output is meaningful.
 - [ ] Add targeted unit tests for texture upload and offscreen readback.

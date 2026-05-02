@@ -96,6 +96,13 @@ if(MLN_WITH_WEBGPU)
     endif()
 endif()
 
+if(MLN_WITH_SKIA)
+    target_sources(
+        mbgl-glfw
+        PRIVATE ${PROJECT_SOURCE_DIR}/platform/glfw/glfw_skia_backend.cpp
+    )
+endif()
+
 if(DEFINED MLN_WITH_X11 AND MLN_WITH_X11)
     target_compile_definitions(
         mbgl-glfw

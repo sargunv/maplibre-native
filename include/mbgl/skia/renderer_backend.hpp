@@ -13,6 +13,7 @@ namespace skia {
 class Renderable final : public gfx::Renderable {
 public:
     explicit Renderable(Size size_, GrDirectContext* directContext = nullptr);
+    void setSize(Size size_, GrDirectContext* directContext = nullptr);
     PremultipliedImage readStillImage() const;
 };
 
@@ -22,6 +23,7 @@ public:
     ~RendererBackend() override;
 
     gfx::Renderable& getDefaultRenderable() override;
+    void setSize(Size size_);
     void initShaders(gfx::ShaderRegistry&, const ProgramParameters&) override;
     GrDirectContext* getDirectContext() const;
     PremultipliedImage readStillImage() const;
