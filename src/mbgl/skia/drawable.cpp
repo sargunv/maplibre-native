@@ -2636,9 +2636,11 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
     bool hasLinePositionAttribute = vertexDataType == gfx::AttributeDataType::Short4;
     bool hasSymbolPositionAttribute = false;
     if (const auto& attrs = getVertexAttributes()) {
-        if (const auto& attr = attrs->get(shaders::idFillExtrusionPosVertexAttribute)) {
-            hasFillExtrusionPositionAttribute = attr->getSharedType() == gfx::AttributeDataType::Short2 ||
-                                                attr->getDataType() == gfx::AttributeDataType::Short2;
+        if (getIs3D()) {
+            if (const auto& attr = attrs->get(shaders::idFillExtrusionPosVertexAttribute)) {
+                hasFillExtrusionPositionAttribute = attr->getSharedType() == gfx::AttributeDataType::Short2 ||
+                                                    attr->getDataType() == gfx::AttributeDataType::Short2;
+            }
         }
         if (const auto& lineDataAttr = attrs->get(shaders::idLineDataVertexAttribute)) {
             const auto& linePosAttr = attrs->get(shaders::idLinePosNormalVertexAttribute);
