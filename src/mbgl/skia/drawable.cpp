@@ -715,12 +715,14 @@ sk_sp<SkMeshSpecification> linePatternMeshSpecification() {
                                     {Attribute::Type::kFloat2, offsetof(MeshVertex, lineNormal), SkString("a_normal")},
                                     {Attribute::Type::kFloat2, offsetof(MeshVertex, lineWidth), SkString("a_width")},
                                     {Attribute::Type::kFloat, offsetof(MeshVertex, lineBlur), SkString("a_blur")},
-                                    {Attribute::Type::kFloat, offsetof(MeshVertex, lineProgress), SkString("a_progress")}};
+                                    {Attribute::Type::kFloat, offsetof(MeshVertex, lineProgress), SkString("a_progress")},
+                                    {Attribute::Type::kFloat4, offsetof(MeshVertex, fillPatternFrom), SkString("a_pattern_from")},
+                                    {Attribute::Type::kFloat4, offsetof(MeshVertex, fillPatternTo), SkString("a_pattern_to")}};
     const Varying varyings[] = {{Varying::Type::kFloat4, SkString("color")},
-                                {Varying::Type::kFloat2, SkString("normal")},
-                                {Varying::Type::kFloat2, SkString("width")},
-                                {Varying::Type::kFloat, SkString("blur")},
-                                {Varying::Type::kFloat, SkString("progress")}};
+                                {Varying::Type::kFloat4, SkString("line_a")},
+                                {Varying::Type::kFloat2, SkString("line_b")},
+                                {Varying::Type::kFloat4, SkString("pattern_from")},
+                                {Varying::Type::kFloat4, SkString("pattern_to")}};
 
     const SkString vertexShader(R"(
         uniform float4x4 u_matrix;
@@ -734,10 +736,10 @@ sk_sp<SkMeshSpecification> linePatternMeshSpecification() {
             varyings.position = float2((ndc.x * 0.5 + 0.5) * u_viewport.x,
                                        (0.5 - ndc.y * 0.5) * u_viewport.y);
             varyings.color = attrs.a_color;
-            varyings.normal = attrs.a_normal;
-            varyings.width = attrs.a_width;
-            varyings.blur = attrs.a_blur;
-            varyings.progress = attrs.a_progress;
+            varyings.line_a = float4(attrs.a_normal, attrs.a_width);
+            varyings.line_b = float2(attrs.a_blur, attrs.a_progress);
+            varyings.pattern_from = attrs.a_pattern_from;
+            varyings.pattern_to = attrs.a_pattern_to;
             return varyings;
         }
     )");
@@ -759,24 +761,34 @@ sk_sp<SkMeshSpecification> linePatternMeshSpecification() {
         }
 
         float2 pattern_pos(float4 pattern, float scale, const Varyings varyings) {
+            float2 normal = varyings.line_a.xy;
+            float2 width = varyings.line_a.zw;
             float2 pattern_tl = pattern.xy;
             float2 pattern_br = pattern.zw;
             float pixel_ratio = u_pattern_scale.x;
             float tile_zoom_ratio = u_pattern_scale.y;
             float2 display_size = (pattern_br - pattern_tl) / pixel_ratio;
             float2 pattern_size = float2(display_size.x * scale / tile_zoom_ratio, display_size.y);
-            float linesofar = varyings.progress * 32767.0;
+            float linesofar = varyings.line_b.y * 32767.0;
             float x = mod_positive(linesofar / pattern_size.x, 1.0);
-            float y = 0.5 + (varyings.normal.y * clamp(varyings.width.x, 0.0, (pattern_size.y + 2.0) / 2.0) / pattern_size.y);
+            float y = 0.5 + (normal.y * clamp(width.x, 0.0, (pattern_size.y + 2.0) / 2.0) / pattern_size.y);
             return mix2(pattern_tl, pattern_br, float2(x, y));
         }
 
         float2 main(const Varyings varyings, out half4 color) {
-            float dist = length(varyings.normal) * varyings.width.x;
-            float blur = varyings.blur + 1.0;
-            float alpha = clamp(min(dist - (varyings.width.y - blur), varyings.width.x - dist) / blur, 0.0, 1.0);
-            float2 pos_a = pattern_pos(u_pattern_from, u_pattern_scale.z, varyings);
-            float2 pos_b = pattern_pos(u_pattern_to, u_pattern_scale.w, varyings);
+            float2 normal = varyings.line_a.xy;
+            float2 width = varyings.line_a.zw;
+            float dist = length(normal) * width.x;
+            float blur = varyings.line_b.x + 1.0;
+            float alpha = clamp(min(dist - (width.y - blur), width.x - dist) / blur, 0.0, 1.0);
+            float has_pattern_from = step(0.0001, max(varyings.pattern_from.z - varyings.pattern_from.x,
+                                                       varyings.pattern_from.w - varyings.pattern_from.y));
+            float has_pattern_to = step(0.0001, max(varyings.pattern_to.z - varyings.pattern_to.x,
+                                                     varyings.pattern_to.w - varyings.pattern_to.y));
+            float4 pattern_from = mix(u_pattern_from, varyings.pattern_from, has_pattern_from);
+            float4 pattern_to = mix(u_pattern_to, varyings.pattern_to, has_pattern_to);
+            float2 pos_a = pattern_pos(pattern_from, u_pattern_scale.z, varyings);
+            float2 pos_b = pattern_pos(pattern_to, u_pattern_scale.w, varyings);
             float4 sampled = mix(u_image.eval(pos_a), u_image.eval(pos_b), u_fade);
             color = half4(sampled * alpha * varyings.color.a);
             return varyings.position;
@@ -3085,6 +3097,22 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
                 lineGapWidth = props->gapwidth;
                 lineFloorWidth = props->floorwidth;
             }
+            if (linePatternDrawable) {
+                const shaders::LinePatternTilePropsUBO* tileProps = nullptr;
+#if MLN_UBO_CONSOLIDATION
+                if (const auto* lineTilePropsUnion = getUBO<shaders::LineTilePropsUnionUBO>(
+                        layerUniforms, shaders::idLineTilePropsUBO, getUBOIndex())) {
+                    tileProps = &lineTilePropsUnion->linePatternTilePropsUBO;
+                }
+#endif
+                if (!tileProps) {
+                    tileProps = getUBO<shaders::LinePatternTilePropsUBO>(&getUniformBuffers(), shaders::idLineTilePropsUBO);
+                }
+                if (tileProps) {
+                    fillPatternFrom = tileProps->pattern_from;
+                    fillPatternTo = tileProps->pattern_to;
+                }
+            }
         }
     } else if (getName().find("fill-outline-pattern") != std::string::npos) {
         const shaders::FillOutlinePatternDrawableUBO* patternDrawableUBO = nullptr;
@@ -3599,6 +3627,22 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
             if (const auto& floorWidthAttr = attrs->get(shaders::idLineFloorWidthVertexAttribute)) {
                 initFloat2Reader(*floorWidthAttr, lineFloorWidthReader);
             }
+            if (linePatternDrawable) {
+                const auto initUShort4Reader = [](const gfx::VertexAttribute& attr, UShort4Reader& reader) {
+                    if (attr.getSharedRawData() && attr.getSharedType() == gfx::AttributeDataType::UShort4) {
+                        const auto offset = attr.getSharedOffset() + attr.getSharedVertexOffset() * attr.getSharedStride();
+                        reader.data = static_cast<const std::uint8_t*>(attr.getSharedRawData()->getRawData()) + offset;
+                        reader.stride = attr.getSharedStride();
+                        reader.count = attr.getSharedRawData()->getRawCount() - attr.getSharedVertexOffset();
+                    } else if (attr.getDataType() == gfx::AttributeDataType::UShort4 && !attr.getRawData().empty()) {
+                        reader.data = attr.getRawData().data();
+                        reader.stride = sizeof(std::uint16_t) * 4;
+                        reader.count = attr.getRawData().size() / reader.stride;
+                    }
+                };
+                if (const auto& attr = attrs->get(shaders::idLinePatternFromVertexAttribute)) initUShort4Reader(*attr, fillPatternFromReader);
+                if (const auto& attr = attrs->get(shaders::idLinePatternToVertexAttribute)) initUShort4Reader(*attr, fillPatternToReader);
+            }
         }
         if (!lineDataReader.data) {
             return;
@@ -3945,6 +3989,14 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
                                             static_cast<float>(lineData[3]) * 64.0f) *
                                            2.0f / 32767.0f;
             meshVertices[i].lineFloorWidth = vertexLineFloorWidth == 0.0f ? 1.0f : vertexLineFloorWidth;
+            if (linePatternDrawable) {
+                auto vertexPatternFrom = fillPatternFrom;
+                auto vertexPatternTo = fillPatternTo;
+                fillPatternFromReader.read(static_cast<std::uint16_t>(i), vertexPatternFrom);
+                fillPatternToReader.read(static_cast<std::uint16_t>(i), vertexPatternTo);
+                std::copy(vertexPatternFrom.begin(), vertexPatternFrom.end(), meshVertices[i].fillPatternFrom);
+                std::copy(vertexPatternTo.begin(), vertexPatternTo.end(), meshVertices[i].fillPatternTo);
+            }
         } else {
             meshVertices[i].lineNormal[0] = 0.0f;
             meshVertices[i].lineNormal[1] = 0.0f;

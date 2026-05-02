@@ -121,7 +121,7 @@
 - [x] Pass basic line blur render tests.
 - [x] Pass basic line offset render tests.
 - [ ] Pass line gradient render tests. Core gradient/tile-boundary cases pass; translucent remains a small threshold diff.
-- [x] Pass basic line pattern render tests.
+- [x] Pass basic line pattern render tests. Focused line-pattern sweep is 6/8 passing; literal, data-driven property-function/mixed, opacity, step-curve, and zoom-expression pass. Remaining failures are `@2x` threshold differences and pitched vector-tile pattern placement/output.
 - [x] Pass basic line dasharray render tests.
 - [ ] Pass line render tests.
 - [x] Port circle shader/render path.
