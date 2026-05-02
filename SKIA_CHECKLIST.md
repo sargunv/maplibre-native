@@ -1,6 +1,6 @@
 # Skia Rendering Backend Checklist
 
-Status: Skia builds; focused clipping/blend and line gradient/blur/offset tests pass, with broader parity still in progress.
+Status: Skia builds; clipping/blend, line gradient/blur/offset, and core heatmap color/intensity/opacity paths are validated, with broader parity still in progress.
 
 - [x] Define Skia backend project scope and architecture in `SKIA_RESEARCH.md`.
 - [x] Add `MLN_WITH_SKIA` build option.
@@ -138,7 +138,7 @@ Status: Skia builds; focused clipping/blend and line gradient/blur/offset tests 
 - [ ] Pass collision debug render tests.
 - [x] Port heatmap accumulation pass.
 - [x] Port heatmap colorization pass.
-- [ ] Pass heatmap render tests.
+- [ ] Pass heatmap render tests. Core color/intensity/opacity cases pass; remaining radius/weight failures are small diffs, and combination parity still needs follow-up.
 - [ ] Port hillshade prepare pass.
 - [x] Port hillshade render pass (Skia direct DEM path; offscreen prepare still deferred).
 - [x] Pass standalone hillshade render tests.

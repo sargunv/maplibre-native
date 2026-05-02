@@ -1469,7 +1469,8 @@ sk_sp<SkMeshSpecification> heatmapMeshSpecification() {
                                     {Attribute::Type::kFloat2, offsetof(MeshVertex, heatmapWeight), SkString("a_weight")},
                                     {Attribute::Type::kFloat2, offsetof(MeshVertex, heatmapRadius), SkString("a_radius")}};
     const Varying varyings[] = {{Varying::Type::kFloat, SkString("weight")},
-                                {Varying::Type::kFloat2, SkString("extrude")}};
+                                {Varying::Type::kFloat2, SkString("extrude")},
+                                {Varying::Type::kFloat, SkString("inv_w")}};
 
     const SkString vertexShader(R"(
         const float ZERO = 1.0 / 255.0 / 16.0;
@@ -1494,9 +1495,9 @@ sk_sp<SkMeshSpecification> heatmapMeshSpecification() {
             float radius = unpack_mix_float(attrs.a_radius, u_radius_t);
             float2 unscaled_extrude = mod(attrs.a_pos, 2.0) * 2.0 - 1.0;
             float S = sqrt(-2.0 * log(ZERO / (max(weight, ZERO) * max(u_intensity, ZERO) * GAUSS_COEF))) / 3.0;
-            varyings.extrude = S * unscaled_extrude;
+            float2 extrude = S * unscaled_extrude;
             varyings.weight = weight;
-            float2 scaled_extrude = varyings.extrude * radius * u_extrude_scale;
+            float2 scaled_extrude = extrude * radius * u_extrude_scale;
             float2 tile_pos = floor(attrs.a_pos * 0.5) + scaled_extrude;
 
             float4 projected = u_matrix * float4(tile_pos, 0.0, 1.0);
@@ -1504,6 +1505,8 @@ sk_sp<SkMeshSpecification> heatmapMeshSpecification() {
             float2 ndc = projected.xy * inv_w;
             varyings.position = float2((ndc.x * 0.5 + 0.5) * u_viewport.x,
                                        (0.5 - ndc.y * 0.5) * u_viewport.y);
+            varyings.extrude = extrude * inv_w;
+            varyings.inv_w = inv_w;
             return varyings;
         }
     )");
@@ -1513,7 +1516,9 @@ sk_sp<SkMeshSpecification> heatmapMeshSpecification() {
         uniform float u_intensity;
 
         float2 main(const Varyings varyings, out half4 color) {
-            float d = -0.5 * 3.0 * 3.0 * dot(varyings.extrude, varyings.extrude);
+            float inv_w = varyings.inv_w == 0.0 ? 1.0 : varyings.inv_w;
+            float2 extrude = varyings.extrude / inv_w;
+            float d = -0.5 * 3.0 * 3.0 * dot(extrude, extrude);
             float val = varyings.weight * u_intensity * GAUSS_COEF * exp(d);
             color = half4(val, 1.0, 1.0, 1.0);
             return varyings.position;
@@ -2629,6 +2634,7 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
     const bool lineSDFDrawable = getName().find("lineSDF") != std::string::npos;
     bool hasFillExtrusionPositionAttribute = false;
     bool hasLinePositionAttribute = vertexDataType == gfx::AttributeDataType::Short4;
+    bool hasSymbolPositionAttribute = false;
     if (const auto& attrs = getVertexAttributes()) {
         if (const auto& attr = attrs->get(shaders::idFillExtrusionPosVertexAttribute)) {
             hasFillExtrusionPositionAttribute = attr->getSharedType() == gfx::AttributeDataType::Short2 ||
@@ -2644,6 +2650,14 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
                                                      linePosAttr->getDataType() == gfx::AttributeDataType::Short4);
             hasLinePositionAttribute = hasLineData && (hasLinePositionAttribute || hasLinePos);
         }
+        if (const auto& symbolDataAttr = attrs->get(shaders::idSymbolDataVertexAttribute)) {
+            const auto& symbolPosAttr = attrs->get(shaders::idSymbolPosOffsetVertexAttribute);
+            const auto hasSymbolData = symbolDataAttr->getSharedType() == gfx::AttributeDataType::UShort4 ||
+                                       symbolDataAttr->getDataType() == gfx::AttributeDataType::UShort4;
+            const auto hasSymbolPos = symbolPosAttr && (symbolPosAttr->getSharedType() == gfx::AttributeDataType::Short4 ||
+                                                        symbolPosAttr->getDataType() == gfx::AttributeDataType::Short4);
+            hasSymbolPositionAttribute = hasSymbolData && hasSymbolPos;
+        }
     }
     if (getName().find("-collision/") != std::string::npos) {
         collisionBoxDrawable = getName().find("/box") != std::string::npos;
@@ -2655,7 +2669,7 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
             collisionExtrudeScale = tilePropsUBO->extrude_scale;
             collisionOverscaleFactor = tilePropsUBO->overscale_factor;
         }
-    } else if (getName().find("/icon") != std::string::npos && symbolImageTexture) {
+    } else if (hasSymbolPositionAttribute && getName().find("/icon") != std::string::npos && symbolImageTexture) {
         const shaders::SymbolDrawableUBO* drawableUBO = nullptr;
 #if MLN_UBO_CONSOLIDATION
         drawableUBO = getUBO<shaders::SymbolDrawableUBO>(layerUniforms, shaders::idSymbolDrawableUBO, getUBOIndex());
@@ -2681,7 +2695,7 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
                 symbolOpacity = props->icon_opacity;
             }
         }
-    } else if (!hasLinePositionAttribute && (symbolImageTexture || symbolImageIconTexture)) {
+    } else if (hasSymbolPositionAttribute && (symbolImageTexture || symbolImageIconTexture)) {
         const shaders::SymbolDrawableUBO* drawableUBO = nullptr;
         const shaders::SymbolTilePropsUBO* tilePropsUBO = nullptr;
 #if MLN_UBO_CONSOLIDATION
@@ -2727,7 +2741,8 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
             }
         }
     } else if (getName().find("heatmapTexture") != std::string::npos && heatmapImageTexture && heatmapColorRampTexture) {
-        if (const auto* props = getUBO<shaders::HeatmapTexturePropsUBO>(layerUniforms, shaders::idHeatmapTexturePropsUBO)) {
+        const auto* props = getUBO<shaders::HeatmapTexturePropsUBO>(layerUniforms, shaders::idHeatmapTexturePropsUBO);
+        if (props) {
             heatmapTextureDrawable = true;
             matrix = props->matrix;
             heatmapTextureOpacity = props->opacity;
