@@ -1,6 +1,6 @@
 # Skia Rendering Backend Checklist
 
-Status: Skia builds; clipping/blend, core fill/circle/raster, stretchable icons, line gradient/blur/offset, fill-extrusion base/height/pattern, core heatmap paths, collision debug geometry, and broad symbol basics are validated, with advanced parity still in progress.
+Status: Skia builds; clipping/blend, core fill/circle/raster, stretchable icons, line gradient/blur/offset, fill-extrusion base/height/pattern, core heatmap paths, collision debug geometry, broad symbol basics, and most hillshade combinations are validated, with advanced parity still in progress.
 
 - [x] Define Skia backend project scope and architecture in `SKIA_RESEARCH.md`.
 - [x] Add `MLN_WITH_SKIA` build option.
@@ -142,7 +142,7 @@ Status: Skia builds; clipping/blend, core fill/circle/raster, stretchable icons,
 - [ ] Port hillshade prepare pass.
 - [x] Port hillshade render pass (Skia direct DEM path; offscreen prepare still deferred).
 - [x] Pass standalone hillshade render tests.
-- [ ] Pass hillshade layer-combination render tests.
+- [ ] Pass hillshade layer-combination render tests. Focused color-relief/hillshade sweep is 53/55 passing; hillshade combinations are 22/24 passing, with remaining failures limited to color-relief/hillshade sandwich cases.
 - [x] Port color relief shader/render path.
 - [x] Pass standalone color relief render tests.
 - [x] Decide fill extrusion policy for Skia initial release.

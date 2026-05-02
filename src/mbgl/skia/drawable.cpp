@@ -1099,7 +1099,7 @@ sk_sp<SkMeshSpecification> colorReliefMeshSpecification() {
 
             float2 epsilon = 1.0 / u_dimension;
             float scale = (u_dimension.x - 2.0) / u_dimension.x;
-            varyings.dem_pos = (attrs.a_pos / 8192.0) * scale + epsilon;
+            varyings.dem_pos = (attrs.a_texture_pos / 8192.0) * scale + epsilon;
             if (attrs.a_pos.y < -32767.5) varyings.dem_pos.y = 0.0;
             if (attrs.a_pos.y > 32766.5) varyings.dem_pos.y = 1.0;
             return varyings;
