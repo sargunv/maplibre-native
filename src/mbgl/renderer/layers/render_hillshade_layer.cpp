@@ -153,7 +153,7 @@ static const std::string HillshadeShaderGroupName = "HillshadeShader";
 
 void RenderHillshadeLayer::update(gfx::ShaderRegistry& shaders,
                                   gfx::Context& context,
-                                  [[maybe_unused]] const TransformState& state,
+                                  const TransformState& state,
                                   const std::shared_ptr<UpdateParameters>&,
                                   [[maybe_unused]] const RenderTree& renderTree,
                                   UniqueChangeRequestVec& changes) {
@@ -204,6 +204,17 @@ void RenderHillshadeLayer::update(gfx::ShaderRegistry& shaders,
     }
     const auto staticDataIndices = RenderStaticData::quadTriangleIndices();
     const auto staticDataSegments = RenderStaticData::rasterSegments();
+    const auto getPreparedTexture = [&](HillshadeBucket& bucket) {
+        auto texture = bucket.renderTarget->getTexture();
+        if (texture) {
+            texture->setSamplerConfiguration({.filter = state.getZoom() > static_cast<double>(maxzoom)
+                                                            ? gfx::TextureFilterType::Linear
+                                                            : gfx::TextureFilterType::Nearest,
+                                               .wrapU = gfx::TextureWrapType::Clamp,
+                                               .wrapV = gfx::TextureWrapType::Clamp});
+        }
+        return texture;
+    };
 
     std::unique_ptr<gfx::DrawableBuilder> hillshadeBuilder;
     std::unique_ptr<gfx::DrawableBuilder> hillshadePrepareBuilder;
@@ -358,18 +369,7 @@ void RenderHillshadeLayer::update(gfx::ShaderRegistry& shaders,
                                             std::move(indices),
                                             segments->data(),
                                             segments->size());
-#if MLN_RENDER_BACKEND_SKIA
-            std::shared_ptr<gfx::Texture2D> texture = context.createTexture2D();
-            texture->setImage(bucket.getDEMData().getImagePtr());
-            texture->setSamplerConfiguration({.filter = gfx::TextureFilterType::Nearest,
-                                              .wrapU = gfx::TextureWrapType::Clamp,
-                                              .wrapV = gfx::TextureWrapType::Clamp});
-            drawable.setTexture(texture, idHillshadeImageTexture);
-            drawable.setData(std::make_unique<gfx::HillshadePrepareDrawableData>(
-                bucket.getDEMData().stride, bucket.getDEMData().encoding, maxzoom));
-#else
-            drawable.setTexture(bucket.renderTarget->getTexture(), idHillshadeImageTexture);
-#endif
+            drawable.setTexture(getPreparedTexture(bucket), idHillshadeImageTexture);
 
             return true;
         };
@@ -385,27 +385,13 @@ void RenderHillshadeLayer::update(gfx::ShaderRegistry& shaders,
         hillshadeBuilder->setVertexAttributes(buildVertexAttributes());
         hillshadeBuilder->setRawVertices({}, vertices->elements(), gfx::AttributeDataType::Short2);
         hillshadeBuilder->setSegments(gfx::Triangles(), indices->vector(), segments->data(), segments->size());
-#if MLN_RENDER_BACKEND_SKIA
-        std::shared_ptr<gfx::Texture2D> hillshadeTexture = context.createTexture2D();
-        hillshadeTexture->setImage(bucket.getDEMData().getImagePtr());
-        hillshadeTexture->setSamplerConfiguration({.filter = gfx::TextureFilterType::Nearest,
-                                                   .wrapU = gfx::TextureWrapType::Clamp,
-                                                   .wrapV = gfx::TextureWrapType::Clamp});
-        hillshadeBuilder->setTexture(hillshadeTexture, idHillshadeImageTexture);
-#else
-        hillshadeBuilder->setTexture(bucket.renderTarget->getTexture(), idHillshadeImageTexture);
-#endif
+        hillshadeBuilder->setTexture(getPreparedTexture(bucket), idHillshadeImageTexture);
 
         hillshadeBuilder->flush(context);
 
         for (auto& drawable : hillshadeBuilder->clearDrawables()) {
             drawable->setTileID(tileID);
             drawable->setLayerTweaker(layerTweaker);
-#if MLN_RENDER_BACKEND_SKIA
-            drawable->setData(std::make_unique<gfx::HillshadePrepareDrawableData>(
-                bucket.getDEMData().stride, bucket.getDEMData().encoding, maxzoom));
-#endif
-
             tileLayerGroup->addDrawable(renderPass, tileID, std::move(drawable));
             ++stats.drawablesAdded;
         }

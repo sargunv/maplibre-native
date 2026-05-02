@@ -137,10 +137,10 @@
 - [x] Port heatmap accumulation pass.
 - [x] Port heatmap colorization pass.
 - [ ] Pass heatmap render tests. Core color/intensity/opacity cases pass; remaining radius/weight failures are small diffs, and combination parity still needs follow-up.
-- [ ] Port hillshade prepare pass.
-- [x] Port hillshade render pass (Skia direct DEM path; offscreen prepare still deferred).
+- [x] Port hillshade prepare pass.
+- [x] Port hillshade render pass using prepared offscreen derivative textures.
 - [x] Pass standalone hillshade render tests.
-- [ ] Pass hillshade layer-combination render tests. Focused color-relief/hillshade sweep is 53/55 passing; hillshade combinations are 22/24 passing, with remaining failures limited to color-relief/hillshade sandwich cases.
+- [ ] Pass hillshade layer-combination render tests. Broad hillshade sweep is 49/51 passing, with remaining failures limited to color-relief/hillshade sandwich cases.
 - [x] Port color relief shader/render path.
 - [x] Pass standalone color relief render tests.
 - [x] Decide fill extrusion policy for Skia initial release.

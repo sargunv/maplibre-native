@@ -1306,6 +1306,7 @@ sk_sp<SkMeshSpecification> hillshadeMeshSpecification() {
         uniform float u_zoom;
         uniform float2 u_latrange;
         uniform float u_exaggeration;
+        uniform int u_prepared;
         uniform int u_method;
         uniform int u_num_lights;
         uniform float4 u_accent;
@@ -1368,6 +1369,11 @@ sk_sp<SkMeshSpecification> hillshadeMeshSpecification() {
             return float2((c + f + f + i) - (a + d + d + g),
                           (g + h + h + i) - (a + b + b + c)) *
                    tile_size / pow(2.0, exaggeration + (28.2562 - u_zoom));
+        }
+
+        float2 get_prepared_deriv(float2 tile_pos) {
+            float4 data = u_image.eval(tile_pos * u_dimension);
+            return data.rg * 8.0 - 4.0;
         }
 
         float4 standard_hillshade(float2 deriv) {
@@ -1447,7 +1453,7 @@ sk_sp<SkMeshSpecification> hillshadeMeshSpecification() {
         float2 main(const Varyings varyings, out half4 color) {
             float latitude = (u_latrange.x - u_latrange.y) * varyings.tile_pos.y + u_latrange.y;
             float scale_factor = cos(latitude * PI / 180.0);
-            float2 deriv = get_deriv(varyings.dem_pos) / scale_factor;
+            float2 deriv = (u_prepared != 0 ? get_prepared_deriv(varyings.tile_pos) : get_deriv(varyings.dem_pos)) / scale_factor;
             float4 result = u_method == BASIC ? basic_hillshade(deriv) :
                             (u_method == COMBINED ? combined_hillshade(deriv) :
                              (u_method == IGOR ? igor_hillshade(deriv) :
@@ -2583,6 +2589,7 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
     std::array<float, 2> hillshadeDimension = {1.0f, 1.0f};
     float hillshadeZoom = 0.0f;
     bool hillshadeOverzoom = false;
+    int32_t hillshadePrepared = 0;
     std::array<float, 2> hillshadeLatrange = {0.0f, 0.0f};
     float hillshadeExaggeration = 0.5f;
     int32_t hillshadeMethod = 0;
@@ -2819,6 +2826,8 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
                 hillshadeZoom = static_cast<float>(std::min<int32_t>(getTileID() ? getTileID()->canonical.z : data->maxzoom,
                                                                      data->maxzoom));
                 hillshadeOverzoom = parameters.state.getZoom() > static_cast<double>(data->maxzoom);
+            } else {
+                hillshadePrepared = 1;
             }
             if (getTileID() && !getData()) {
                 hillshadeZoom = static_cast<float>(getTileID()->canonical.z);
@@ -4335,6 +4344,7 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
         writeUniform(uniforms, *specification, "u_zoom", &hillshadeZoom, sizeof(hillshadeZoom));
         writeUniform(uniforms, *specification, "u_latrange", hillshadeLatrange.data(), hillshadeLatrange.size() * sizeof(float));
         writeUniform(uniforms, *specification, "u_exaggeration", &hillshadeExaggeration, sizeof(hillshadeExaggeration));
+        writeUniform(uniforms, *specification, "u_prepared", &hillshadePrepared, sizeof(hillshadePrepared));
         writeUniform(uniforms, *specification, "u_method", &hillshadeMethod, sizeof(hillshadeMethod));
         writeUniform(uniforms, *specification, "u_num_lights", &hillshadeNumLights, sizeof(hillshadeNumLights));
         writeUniform(uniforms, *specification, "u_accent", hillshadeAccent.data(), hillshadeAccent.size() * sizeof(float));
