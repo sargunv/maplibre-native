@@ -2819,7 +2819,7 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
                 hillshadeHighlights = props->highlights;
             }
         }
-    } else if (!hasLinePositionAttribute && colorReliefImageTexture) {
+    } else if (getName().find("colorRelief") != std::string::npos && !hasLinePositionAttribute && colorReliefImageTexture) {
         const shaders::ColorReliefDrawableUBO* drawableUBO = nullptr;
         const shaders::ColorReliefTilePropsUBO* tilePropsUBO = nullptr;
 #if MLN_UBO_CONSOLIDATION
