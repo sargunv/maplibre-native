@@ -219,6 +219,25 @@ Local result from 2026-05-02:
 
 The Skia failures are concentrated in `tile-lod/*` plus `real-world/nepal`. This closes the initial tile-heavy profiling milestone while leaving tile LOD parity and performance as follow-up work. The run confirms the Skia backend can execute the tile-heavy suite locally without crashes or resource lifetime failures.
 
+## Text-Heavy Profiling
+
+Text-heavy profiling uses a focused render-test subset that exercises glyph atlas uploads, SDF text drawing, formatted text, CJK shaping, vertical writing, variable anchors, symbol placement, symbol spacing, and text sort/z-order paths.
+
+The measured subset is selected with this filter:
+
+```sh
+render-tests/(text-(field/(literal|formatted|formatted-images|formatted-line|formatted-arabic)|font/(literal|chinese|devanagari)|size/(literal|composite-function-line-placement)|color/(literal|property-function)|halo-color/literal|opacity/literal|writing-mode/(point_label/cjk-vertical-mode|line_label/chinese)|variable-anchor/(top-bottom-left-right|all-anchors-tile-map-mode))|symbol-(placement/(point|line|line-center)|spacing/(line-close|line-far)|sort-key/(text-placement|text-expression)|z-order/icon-with-text))/style.json$
+```
+
+Local result from 2026-05-02:
+
+| Backend | Result | Wall time |
+| --- | --- | --- |
+| Skia | 17 passed, 9 failed | 2.12s |
+| Metal | 25 passed, 1 ignored passed | 1.99s |
+
+The Skia failures are concentrated in line-label placement/spacing, line-placement text size, formatted line text, tile-map variable anchors, and CJK/vertical writing modes. The timing is close to Metal for this Debug smoke subset, but the parity gaps mean text-heavy performance should be revisited after the remaining symbol/text placement work lands.
+
 ## Fixed-Function State
 
 The Skia backend maps MapLibre's fixed-function state only where Skia exposes an equivalent canvas or paint concept.
