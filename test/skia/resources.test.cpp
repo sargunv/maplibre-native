@@ -118,6 +118,54 @@ TEST(SkiaResource, VertexAttributePositionPacking) {
               sharedDrawable.readPackedPositionsForTests());
 }
 
+TEST(SkiaResource, UniformBufferPackingAndUpdate) {
+    struct Payload {
+        float matrix[4];
+        std::uint32_t flags;
+    };
+
+    const Payload initial{{1.0f, 2.0f, 3.0f, 4.0f}, 7};
+    UniformBuffer buffer(&initial, sizeof(initial));
+
+    EXPECT_EQ(sizeof(initial), buffer.getSize());
+    ASSERT_EQ(sizeof(initial), buffer.data().size());
+    EXPECT_EQ(0, std::memcmp(buffer.data().data(), &initial, sizeof(initial)));
+
+    const std::array<std::uint8_t, 3> replacement = {9, 8, 7};
+    buffer.update(replacement.data(), replacement.size());
+    EXPECT_EQ(replacement.size(), buffer.getSize());
+    EXPECT_EQ((std::vector<std::uint8_t>{9, 8, 7}), buffer.data());
+}
+
+TEST(SkiaResource, UniformBufferArrayCreateOrUpdate) {
+    auto backend = gfx::HeadlessBackend::Create({1, 1});
+    gfx::BackendScope scope{*backend->getRendererBackend()};
+    auto& context = backend->getRendererBackend()->getContext();
+    auto uniformBuffers = context.createLayerUniformBufferArray();
+
+    std::uint32_t value = 0x12345678u;
+    constexpr std::size_t uniformId = 0;
+    uniformBuffers->createOrUpdate(uniformId, &value, sizeof(value), context);
+
+    auto first = std::static_pointer_cast<UniformBuffer>(uniformBuffers->get(uniformId));
+    ASSERT_TRUE(first);
+    EXPECT_EQ(sizeof(value), first->getSize());
+    EXPECT_EQ(0, std::memcmp(first->data().data(), &value, sizeof(value)));
+
+    value = 0x90abcdefu;
+    uniformBuffers->createOrUpdate(uniformId, &value, sizeof(value), context);
+    auto second = std::static_pointer_cast<UniformBuffer>(uniformBuffers->get(uniformId));
+    EXPECT_EQ(first.get(), second.get());
+    EXPECT_EQ(0, std::memcmp(second->data().data(), &value, sizeof(value)));
+
+    const std::array<std::uint8_t, 6> larger = {1, 2, 3, 4, 5, 6};
+    uniformBuffers->createOrUpdate(uniformId, larger.data(), larger.size(), context);
+    auto third = std::static_pointer_cast<UniformBuffer>(uniformBuffers->get(uniformId));
+    EXPECT_NE(second.get(), third.get());
+    EXPECT_EQ(larger.size(), third->getSize());
+    EXPECT_EQ(std::vector<std::uint8_t>(larger.begin(), larger.end()), third->data());
+}
+
 } // namespace
 } // namespace skia
 } // namespace mbgl
