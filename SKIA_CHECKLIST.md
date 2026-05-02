@@ -1,6 +1,6 @@
 # Skia Rendering Backend Checklist
 
-Status: Skia builds and focused clipping/blend smoke tests pass; broader render-test parity is still in progress.
+Status: Skia builds; focused clipping/blend and basic line blur/offset tests pass, with line gradient and broader parity still in progress.
 
 - [x] Define Skia backend project scope and architecture in `SKIA_RESEARCH.md`.
 - [x] Add `MLN_WITH_SKIA` build option.
@@ -120,8 +120,8 @@ Status: Skia builds and focused clipping/blend smoke tests pass; broader render-
 - [x] Pass basic line opacity render tests.
 - [x] Pass basic line width render tests.
 - [x] Pass basic line gap-width render tests.
-- [ ] Pass basic line blur render tests.
-- [ ] Pass basic line offset render tests.
+- [x] Pass basic line blur render tests.
+- [x] Pass basic line offset render tests.
 - [ ] Pass line gradient render tests.
 - [x] Pass basic line pattern render tests.
 - [x] Pass basic line dasharray render tests.
