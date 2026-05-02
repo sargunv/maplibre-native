@@ -17,6 +17,7 @@
 #include <mbgl/gfx/vertex_buffer.hpp>
 #include <mbgl/renderer/layer_group.hpp>
 #include <mbgl/skia/context.hpp>
+#include <mbgl/skia/skia_fwd.hpp>
 #include <mbgl/util/image.hpp>
 
 #include <include/core/SkCanvas.h>
@@ -31,8 +32,6 @@
 #include <cstdint>
 #include <cstring>
 #include <vector>
-
-class GrDirectContext;
 
 namespace mbgl {
 namespace skia {

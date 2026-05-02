@@ -37,7 +37,7 @@
 - [x] Include real Skia headers for `SkSurface`, `SkCanvas`, `SkImage`, and `SkMesh`.
 - [x] Verify vendored Skia checkout and GN configure.
 - [x] Verify vendored Skia static library build.
-- [ ] Add Skia forward declarations or wrapper headers for `SkShader` and `SkMeshSpecification`.
+- [x] Add Skia forward declarations or wrapper headers for `SkShader` and `SkMeshSpecification`.
 - [x] Replace placeholder default renderable with a host-provided or owned `SkSurface` renderable.
 - [x] Define GPU-first Skia platform integration ownership model for default surfaces.
 - [x] Add `GrDirectContext` ownership to the Skia backend for Ganesh rendering.
