@@ -84,6 +84,28 @@ TEST(SkiaResource, OffscreenReadbackAfterClear) {
     }
 }
 
+TEST(SkiaResource, OffscreenTextureSnapshotOwnsSurface) {
+    auto backend = gfx::HeadlessBackend::Create({2, 2});
+    gfx::BackendScope scope{*backend->getRendererBackend()};
+    auto& context = backend->getRendererBackend()->getContext();
+    gfx::Texture2DPtr texture;
+
+    {
+        auto encoder = context.createCommandEncoder();
+        auto offscreenTexture = context.createOffscreenTexture({2, 2}, gfx::TextureChannelDataType::UnsignedByte);
+        auto renderPass = encoder->createRenderPass("skia offscreen snapshot",
+                                                    {*offscreenTexture, Color{0.0f, 1.0f, 0.0f, 1.0f}, {}, {}});
+        renderPass.reset();
+        texture = offscreenTexture->getTexture();
+    }
+
+    auto skiaTexture = std::static_pointer_cast<Texture2D>(texture);
+    ASSERT_TRUE(skiaTexture);
+    ASSERT_TRUE(skiaTexture->getImage());
+    EXPECT_EQ(2, skiaTexture->getImage()->width());
+    EXPECT_EQ(2, skiaTexture->getImage()->height());
+}
+
 TEST(SkiaResource, VertexAttributePositionPacking) {
     Drawable rawDrawable("raw-position-test");
     rawDrawable.setVertices(rawBytes(std::vector<std::int16_t>{10, 20, -30, 40}), 2, gfx::AttributeDataType::Short2);

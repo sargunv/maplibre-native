@@ -177,6 +177,14 @@ MapLibre render targets map naturally to offscreen `SkSurface`s:
 
 This should support heatmap and hillshade-style intermediate passes without changing the shared renderer flow.
 
+## Memory Ownership And Cleanup
+
+Skia backend resources use RAII ownership at the MapLibre boundary. `RendererBackend` owns the optional Ganesh `GrDirectContext`, `RenderableResource` owns each default or offscreen `SkSurface`, and `Texture2D` owns its CPU pixel staging plus the current `SkImage` snapshot.
+
+Offscreen-derived textures retain their source `SkSurface` with `sk_sp<SkSurface>` while they need live snapshots. This avoids dangling references when a texture outlives the `OffscreenTexture` that created it. Pixel uploads and explicit image snapshots clear any old surface snapshot source before replacing image contents.
+
+Buffer and uniform resources own byte copies in `std::vector<std::uint8_t>`, so drawable resource lifetime does not depend on caller-owned staging memory. Skia GPU resources are released by dropping `sk_sp` and `std::unique_ptr` owners; `Context::reduceMemoryUsage()` is still a no-op and can later call Ganesh cache-purge APIs once the backend has a clear memory-pressure policy.
+
 ## Tile Clipping
 
 Existing GPU backends use stencil for tile clipping. Public Skia canvas APIs do not expose GL-style stencil writes/tests as a portable rendering primitive. The Skia backend should implement tile clipping in `skia::TileLayerGroup::render()` using the canvas clip stack.

@@ -31,6 +31,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <utility>
 #include <vector>
 
 namespace mbgl {
@@ -63,6 +64,7 @@ public:
     void bind() override {}
 
     SkSurface* getSurface() const { return surface.get(); }
+    const sk_sp<SkSurface>& getSurfaceRef() const { return surface; }
     SkCanvas* getCanvas() const { return surface ? surface->getCanvas() : nullptr; }
     void flush() const;
 
@@ -88,7 +90,7 @@ public:
     void upload() override;
     bool needsUpload() const noexcept override;
     void setImageSnapshot(sk_sp<SkImage> image_);
-    void setSnapshotSource(SkSurface* surface_) { snapshotSource = surface_; }
+    void setSnapshotSource(sk_sp<SkSurface> surface_) { snapshotSource = std::move(surface_); }
     const sk_sp<SkImage>& getImage() const;
     const SamplerState& getSamplerState() const { return samplerState; }
     const std::vector<std::uint8_t>& getPixels() const { return pixels; }
@@ -101,7 +103,7 @@ private:
     std::shared_ptr<PremultipliedImage> stagedImage;
     std::vector<std::uint8_t> pixels;
     mutable sk_sp<SkImage> skImage;
-    SkSurface* snapshotSource = nullptr;
+    sk_sp<SkSurface> snapshotSource;
     bool dirty = false;
 };
 

@@ -103,6 +103,7 @@ size_t Texture2D::numChannels() const noexcept {
 }
 
 void Texture2D::create() {
+    snapshotSource.reset();
     pixels.assign(getDataSize(), 0);
     if (!pixels.empty()) {
         SkPixmap pixmap(makeImageInfo(size, pixelFormat, channelType), pixels.data(), size.width * getPixelStride());
@@ -114,6 +115,7 @@ void Texture2D::create() {
 }
 
 void Texture2D::upload(const void* pixelData, const Size& size_) {
+    snapshotSource.reset();
     size = size_;
     const auto byteCount = getDataSize();
     pixels.resize(byteCount);
@@ -165,6 +167,7 @@ bool Texture2D::needsUpload() const noexcept {
 }
 
 void Texture2D::setImageSnapshot(sk_sp<SkImage> image_) {
+    snapshotSource.reset();
     skImage = std::move(image_);
     if (skImage) {
         size = {static_cast<uint32_t>(skImage->width()), static_cast<uint32_t>(skImage->height())};
@@ -223,9 +226,10 @@ PremultipliedImage OffscreenTexture::readStillImage() {
 }
 
 const gfx::Texture2DPtr& OffscreenTexture::getTexture() {
-    if (auto* surface = getSkiaResource().getSurface()) {
+    auto& resource = getSkiaResource();
+    if (auto* surface = resource.getSurface()) {
         static_cast<Texture2D&>(*texture).setImageSnapshot(surface->makeImageSnapshot());
-        static_cast<Texture2D&>(*texture).setSnapshotSource(surface);
+        static_cast<Texture2D&>(*texture).setSnapshotSource(resource.getSurfaceRef());
     }
     return texture;
 }
