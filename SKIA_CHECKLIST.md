@@ -169,6 +169,6 @@
 - [x] Document backend limitations and known divergences. Consolidated platform gaps, fixed-function/depth-stencil differences, texture/debug/memory cleanup limitations, and current render-test parity clusters in `SKIA_RESEARCH.md`.
 - [x] Remove placeholder no-op rendering once SkMesh path is active. Audited remaining Skia no-op methods; active rendering now goes through `SkMesh` or explicit Skia helpers, and remaining empty hooks are documented backend-policy no-ops.
 - [x] Remove temporary Skia smoke targets once render-test coverage is sufficient. Deleted `mbgl-skia-smoke` and `mbgl-skia-map-smoke`; Skia validation now relies on render-test smoke coverage, targeted resource tests, and the GLFW sample build.
-- [ ] Remove temporary scaffold comments and dead code.
+- [x] Remove temporary scaffold comments and dead code. Audited Skia source/header files after smoke target removal; no temporary scaffold comments or dead Skia stubs remain.
 - [ ] Reach parity target for initial 2D layer set.
 - [ ] Decide whether to graduate backend from experimental.
