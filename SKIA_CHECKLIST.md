@@ -1,6 +1,6 @@
 # Skia Rendering Backend Checklist
 
-Status: Skia builds; clipping/blend, core fill/circle/raster, stretchable icons, line gradient/blur/offset, fill-extrusion base/height/pattern, core heatmap paths, and collision debug geometry are validated, with broader parity still in progress.
+Status: Skia builds; clipping/blend, core fill/circle/raster, stretchable icons, line gradient/blur/offset, fill-extrusion base/height/pattern, core heatmap paths, collision debug geometry, and broad symbol basics are validated, with advanced parity still in progress.
 
 - [x] Define Skia backend project scope and architecture in `SKIA_RESEARCH.md`.
 - [x] Add `MLN_WITH_SKIA` build option.
@@ -132,8 +132,8 @@ Status: Skia builds; clipping/blend, core fill/circle/raster, stretchable icons,
 - [x] Port symbol icon shader/render path.
 - [x] Port symbol SDF text shader/render path.
 - [x] Port symbol text-and-icon shader/render path.
-- [ ] Pass symbol icon render tests. Stretchable icon/content cases pass; broader icon parity remains in progress.
-- [ ] Pass symbol text render tests.
+- [ ] Pass symbol icon render tests. Broad icon/text sweep is 319/378 passing with 4 ignored; core image/color/halo/opacity/size/rotate/anchor/translate cases pass, with remaining icon failures around icon-text-fit edge cases, icon padding, and pitched/rolled map alignment.
+- [ ] Pass symbol text render tests. Core text color/halo/opacity/anchor/field/size/font/transform/translate cases pass; remaining failures are concentrated in line placement, pitch/roll/depth alignment, vertical/CJK writing modes, formatted line/images, and tile-map-mode variable anchors.
 - [x] Implement collision debug drawing.
 - [ ] Pass collision debug render tests. Focused collision sweep is 3/9 passing with 1 upstream ignored; remaining failures have visible debug geometry but differ in text-path placement or small collision-box offsets.
 - [x] Port heatmap accumulation pass.
