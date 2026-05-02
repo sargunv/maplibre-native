@@ -132,6 +132,23 @@ jobs:
             mbgl-skia-smoke \
             mbgl-skia-map-smoke
 
+      - name: Prepare Skia render test output directory
+        run: mkdir -p metrics/macos-skia
+
+      - name: Run Skia render test smoke
+        id: skia_render_test
+        run: |
+          build-macos-skia/mbgl-render-test-runner \
+            --manifestPath metrics/macos-skia.json \
+            --filter '^(background-color/default|fill-color/default|line-width/default|raster-opacity/default)$'
+
+      - name: Upload Skia render report
+        if: always() && steps.skia_render_test.outcome == 'failure'
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: macos-skia-render-report
+          path: metrics/macos-skia.html
+
   webgpu-cmake:
     name: macOS WebGPU (${{ matrix.variant.name }})
     runs-on: macos-15
