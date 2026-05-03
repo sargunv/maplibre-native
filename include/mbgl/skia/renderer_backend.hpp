@@ -7,13 +7,25 @@
 #include <include/core/SkRefCnt.h>
 #include <include/gpu/ganesh/GrDirectContext.h>
 
+#include <memory>
+
 namespace mbgl {
 namespace skia {
+
+class MetalGpuHandles;
 
 class Renderable final : public gfx::Renderable {
 public:
     explicit Renderable(Size size_, GrDirectContext* directContext = nullptr);
+    Renderable(Size size_,
+               GrDirectContext* directContext,
+               void* metalLayer,
+               void* metalQueue);
     void setSize(Size size_, GrDirectContext* directContext = nullptr);
+    void setSizeForLayer(Size size_,
+                         GrDirectContext* directContext,
+                         void* metalLayer,
+                         void* metalQueue);
     PremultipliedImage readStillImage() const;
 };
 
@@ -26,6 +38,21 @@ public:
     void setSize(Size size_);
     void initShaders(gfx::ShaderRegistry&, const ProgramParameters&) override;
     GrDirectContext* getDirectContext() const;
+
+    // Returns a bridged Metal device pointer (id<MTLDevice>) or nullptr when
+    // the backend is not Metal-backed. Lifetime is owned by the backend.
+    void* getMetalDevice() const noexcept;
+
+    // Returns a bridged Metal command queue pointer (id<MTLCommandQueue>) or
+    // nullptr when the backend is not Metal-backed. Lifetime is owned by the
+    // backend.
+    void* getMetalCommandQueue() const noexcept;
+
+    // Switch the default renderable to draw into a CAMetalLayer the caller
+    // attaches to its window's contentView. Pass a bridged CAMetalLayer*.
+    // Set to nullptr to revert to the backend-owned offscreen surface.
+    void attachMetalLayer(void* metalLayer);
+
     PremultipliedImage readStillImage() const;
 
 protected:
@@ -35,7 +62,10 @@ protected:
 
 private:
     sk_sp<GrDirectContext> directContext;
+    std::unique_ptr<MetalGpuHandles> metalHandles;
+    void* metalLayer = nullptr;
     Renderable defaultRenderable;
+    Size lastSize;
 };
 
 } // namespace skia

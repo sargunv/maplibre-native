@@ -16,9 +16,21 @@ namespace skia {
 Renderable::Renderable(Size size_, GrDirectContext* directContext)
     : gfx::Renderable(size_, std::make_unique<RenderableResource>(size_, directContext)) {}
 
+Renderable::Renderable(Size size_, GrDirectContext* directContext, void* metalLayer, void* metalQueue)
+    : gfx::Renderable(size_,
+                      std::make_unique<RenderableResource>(size_, directContext, metalLayer, metalQueue)) {}
+
 void Renderable::setSize(Size size_, GrDirectContext* directContext) {
     size = size_;
     setResource(std::make_unique<RenderableResource>(size_, directContext));
+}
+
+void Renderable::setSizeForLayer(Size size_,
+                                 GrDirectContext* directContext,
+                                 void* metalLayer,
+                                 void* metalQueue) {
+    size = size_;
+    setResource(std::make_unique<RenderableResource>(size_, directContext, metalLayer, metalQueue));
 }
 
 PremultipliedImage Renderable::readStillImage() const {
@@ -31,10 +43,25 @@ PremultipliedImage Renderable::readStillImage() const {
     return image;
 }
 
+namespace {
+
+GaneshGpuContext setupGaneshContext() {
+    return makeDefaultGaneshContext();
+}
+
+} // namespace
+
 RendererBackend::RendererBackend(Size size, gfx::ContextMode contextMode)
     : gfx::RendererBackend(contextMode),
-      directContext(makeDefaultGaneshContext()),
-      defaultRenderable(size, directContext.get()) {}
+      directContext(),
+      metalHandles(),
+      defaultRenderable(size, nullptr),
+      lastSize(size) {
+    auto ganesh = setupGaneshContext();
+    directContext = std::move(ganesh.context);
+    metalHandles = std::make_unique<MetalGpuHandles>(std::move(ganesh.metal));
+    defaultRenderable.setSize(size, directContext.get());
+}
 
 RendererBackend::~RendererBackend() = default;
 
@@ -43,11 +70,37 @@ gfx::Renderable& RendererBackend::getDefaultRenderable() {
 }
 
 void RendererBackend::setSize(Size size_) {
-    defaultRenderable.setSize(size_, directContext.get());
+    lastSize = size_;
+    if (metalLayer) {
+        updateMetalLayerDrawableSize(metalLayer, size_);
+        defaultRenderable.setSizeForLayer(
+            size_, directContext.get(), metalLayer, metalHandles ? metalHandles->getQueue() : nullptr);
+    } else {
+        defaultRenderable.setSize(size_, directContext.get());
+    }
 }
 
 GrDirectContext* RendererBackend::getDirectContext() const {
     return directContext.get();
+}
+
+void* RendererBackend::getMetalDevice() const noexcept {
+    return metalHandles ? metalHandles->getDevice() : nullptr;
+}
+
+void* RendererBackend::getMetalCommandQueue() const noexcept {
+    return metalHandles ? metalHandles->getQueue() : nullptr;
+}
+
+void RendererBackend::attachMetalLayer(void* layer) {
+    metalLayer = layer;
+    if (metalLayer) {
+        updateMetalLayerDrawableSize(metalLayer, lastSize);
+        defaultRenderable.setSizeForLayer(
+            lastSize, directContext.get(), metalLayer, metalHandles ? metalHandles->getQueue() : nullptr);
+    } else {
+        defaultRenderable.setSize(lastSize, directContext.get());
+    }
 }
 
 PremultipliedImage RendererBackend::readStillImage() const {

@@ -33,18 +33,93 @@ SkColor4f toSkColor(const Color& color) {
 
 } // namespace
 
-RenderableResource::RenderableResource(Size size, GrDirectContext* directContext) {
+RenderableResource::RenderableResource(Size size_, GrDirectContext* directContext_)
+    : directContext(directContext_), size(size_) {
     const auto info = makeImageInfo(size, gfx::TexturePixelType::RGBA, gfx::TextureChannelDataType::UnsignedByte);
     if (directContext) {
-        surface = SkSurfaces::RenderTarget(directContext, skgpu::Budgeted::kNo, info, 0, kTopLeft_GrSurfaceOrigin, nullptr);
+        staticSurface = SkSurfaces::RenderTarget(
+            directContext, skgpu::Budgeted::kNo, info, 0, kTopLeft_GrSurfaceOrigin, nullptr);
     }
-    if (!surface) {
-        surface = SkSurfaces::Raster(info);
+    if (!staticSurface) {
+        staticSurface = SkSurfaces::Raster(info);
     }
 }
 
-void RenderableResource::flush() const {
-    skgpu::ganesh::FlushAndSubmit(surface);
+RenderableResource::RenderableResource(Size size_,
+                                       GrDirectContext* directContext_,
+                                       void* metalLayer_,
+                                       void* metalQueue_)
+    : directContext(directContext_),
+      metalLayer(metalLayer_),
+      metalQueue(metalQueue_),
+      size(size_) {
+    updateMetalLayerDrawableSize(metalLayer, size);
+}
+
+RenderableResource::~RenderableResource() {
+    releaseDrawable();
+}
+
+void RenderableResource::bind() {
+    ensureSurface();
+}
+
+SkSurface* RenderableResource::getSurface() const {
+    if (metalLayer) {
+        const_cast<RenderableResource*>(this)->ensureSurface();
+        return liveSurface.get();
+    }
+    return staticSurface.get();
+}
+
+const sk_sp<SkSurface>& RenderableResource::getSurfaceRef() const {
+    if (metalLayer) {
+        const_cast<RenderableResource*>(this)->ensureSurface();
+        return liveSurface;
+    }
+    return staticSurface;
+}
+
+SkCanvas* RenderableResource::getCanvas() const {
+    auto* surface = getSurface();
+    return surface ? surface->getCanvas() : nullptr;
+}
+
+void RenderableResource::flush() {
+    if (metalLayer) {
+        ensureSurface();
+        if (liveSurface && directContext) {
+            skgpu::ganesh::FlushAndSubmit(liveSurface);
+        }
+        if (liveDrawable) {
+            void* drawable = liveDrawable;
+            liveDrawable = nullptr;
+            presentMetalDrawable(metalQueue, drawable);
+        }
+        // Drop the per-frame surface so the next frame acquires a fresh drawable.
+        liveSurface.reset();
+        return;
+    }
+    skgpu::ganesh::FlushAndSubmit(staticSurface);
+}
+
+void RenderableResource::ensureSurface() {
+    if (!metalLayer) return;
+    if (liveSurface) return;
+    void* drawable = nullptr;
+    auto surface = wrapMetalLayerSurface(directContext, metalLayer, &drawable);
+    if (surface) {
+        liveSurface = std::move(surface);
+        liveDrawable = drawable;
+    }
+}
+
+void RenderableResource::releaseDrawable() {
+    if (liveDrawable) {
+        releaseMetalDrawable(liveDrawable);
+        liveDrawable = nullptr;
+    }
+    liveSurface.reset();
 }
 
 gfx::Texture2D& Texture2D::setSamplerConfiguration(const SamplerState& samplerState_) noexcept {

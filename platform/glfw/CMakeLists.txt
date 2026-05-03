@@ -97,10 +97,24 @@ if(MLN_WITH_WEBGPU)
 endif()
 
 if(MLN_WITH_SKIA)
-    target_sources(
-        mbgl-glfw
-        PRIVATE ${PROJECT_SOURCE_DIR}/platform/glfw/glfw_skia_backend.cpp
-    )
+    if(APPLE)
+        target_sources(
+            mbgl-glfw
+            PRIVATE ${PROJECT_SOURCE_DIR}/platform/glfw/glfw_skia_backend.mm
+        )
+        target_link_libraries(
+            mbgl-glfw
+            PRIVATE
+                "-framework Metal"
+                "-framework QuartzCore"
+                "-framework Cocoa"
+        )
+    else()
+        target_sources(
+            mbgl-glfw
+            PRIVATE ${PROJECT_SOURCE_DIR}/platform/glfw/glfw_skia_backend.cpp
+        )
+    endif()
 endif()
 
 if(DEFINED MLN_WITH_X11 AND MLN_WITH_X11)

@@ -37,8 +37,51 @@
 namespace mbgl {
 namespace skia {
 
-sk_sp<GrDirectContext> makeDefaultGaneshContext();
+// Owns retained Metal handles when the Skia backend is built against the Metal
+// Ganesh path. Both pointers are CFRetain-style references that release on
+// destruction. Empty on non-Metal builds.
+class MetalGpuHandles {
+public:
+    MetalGpuHandles() = default;
+    MetalGpuHandles(void* device_, void* queue_) noexcept;
+    ~MetalGpuHandles();
+    MetalGpuHandles(MetalGpuHandles&&) noexcept;
+    MetalGpuHandles& operator=(MetalGpuHandles&&) noexcept;
+    MetalGpuHandles(const MetalGpuHandles&) = delete;
+    MetalGpuHandles& operator=(const MetalGpuHandles&) = delete;
+
+    void* getDevice() const noexcept { return device; }
+    void* getQueue() const noexcept { return queue; }
+
+private:
+    void* device = nullptr;
+    void* queue = nullptr;
+};
+
+struct GaneshGpuContext {
+    sk_sp<GrDirectContext> context;
+    MetalGpuHandles metal;
+};
+
+GaneshGpuContext makeDefaultGaneshContext();
 bool clipCanvasToTileForTests(SkCanvas&, const mat4&, Size);
+
+// Acquire the next drawable from a CAMetalLayer (bridged void*) and wrap its
+// texture in a Skia surface. Writes the CFRetained drawable into *outDrawable.
+// Returns nullptr on non-Metal builds.
+sk_sp<SkSurface> wrapMetalLayerSurface(GrDirectContext* context, void* metalLayer, void** outDrawable);
+
+// Submit a present-drawable command on a fresh MTLCommandBuffer from the
+// supplied queue (bridged void*) and release the drawable handle. No-op on
+// non-Metal builds.
+void presentMetalDrawable(void* metalQueue, void* drawable);
+
+// Release a CFRetained drawable handle without presenting it. Used during
+// teardown when a frame was acquired but never submitted.
+void releaseMetalDrawable(void* drawable);
+
+// Update the CAMetalLayer's drawableSize. No-op on non-Metal builds.
+void updateMetalLayerDrawableSize(void* metalLayer, Size size);
 
 class BufferResource final : public gfx::VertexBufferResource, public gfx::IndexBufferResource {
 public:
@@ -61,15 +104,36 @@ class DrawScopeResource final : public gfx::DrawScopeResource {};
 class RenderableResource final : public gfx::RenderableResource {
 public:
     RenderableResource(Size size, GrDirectContext* directContext = nullptr);
-    void bind() override {}
+    // Layer-backed constructor: subsequent frames pull the next drawable from
+    // the supplied CAMetalLayer (bridged void*) and present + commit on the
+    // supplied MTLCommandQueue when flush() runs.
+    RenderableResource(Size size,
+                       GrDirectContext* directContext,
+                       void* metalLayer,
+                       void* metalQueue);
+    ~RenderableResource() override;
+    void bind() override;
 
-    SkSurface* getSurface() const { return surface.get(); }
-    const sk_sp<SkSurface>& getSurfaceRef() const { return surface; }
-    SkCanvas* getCanvas() const { return surface ? surface->getCanvas() : nullptr; }
-    void flush() const;
+    SkSurface* getSurface() const;
+    const sk_sp<SkSurface>& getSurfaceRef() const;
+    SkCanvas* getCanvas() const;
+    void flush();
 
 private:
-    sk_sp<SkSurface> surface;
+    void ensureSurface();
+    void releaseDrawable();
+
+    GrDirectContext* directContext = nullptr;
+    void* metalLayer = nullptr;  // CAMetalLayer*, not retained; owned by the GLFW shim.
+    void* metalQueue = nullptr;  // id<MTLCommandQueue>, not retained; owned by RendererBackend.
+    Size size;
+
+    // Used in offscreen mode; reused across frames.
+    sk_sp<SkSurface> staticSurface;
+
+    // Used in layer-backed mode; rebuilt each frame.
+    mutable sk_sp<SkSurface> liveSurface;
+    mutable void* liveDrawable = nullptr;  // CFRetained id<CAMetalDrawable>
 };
 
 class Texture2D final : public gfx::Texture2D {
