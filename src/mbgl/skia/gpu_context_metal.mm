@@ -77,17 +77,15 @@ sk_sp<SkSurface> wrapMetalLayerSurface(GrDirectContext* context, void* metalLaye
     if (!context || !metalLayer || !outDrawable) {
         return nullptr;
     }
-    GrMTLHandle drawable = nullptr;
-    auto surface = SkSurfaces::WrapCAMetalLayer(context,
-                                                (GrMTLHandle)metalLayer,
-                                                kTopLeft_GrSurfaceOrigin,
-                                                /*sampleCnt=*/1,
-                                                kBGRA_8888_SkColorType,
-                                                /*colorSpace=*/nullptr,
-                                                /*surfaceProps=*/nullptr,
-                                                &drawable);
-    *outDrawable = const_cast<void*>(drawable);
-    return surface;
+    *outDrawable = nullptr;
+    return SkSurfaces::WrapCAMetalLayer(context,
+                                        (GrMTLHandle)metalLayer,
+                                        kTopLeft_GrSurfaceOrigin,
+                                        /*sampleCnt=*/1,
+                                        kBGRA_8888_SkColorType,
+                                        /*colorSpace=*/nullptr,
+                                        /*surfaceProps=*/nullptr,
+                                        const_cast<GrMTLHandle*>(reinterpret_cast<const GrMTLHandle*>(outDrawable)));
 #else
     (void)context;
     (void)metalLayer;

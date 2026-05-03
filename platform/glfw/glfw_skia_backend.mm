@@ -40,11 +40,14 @@ GLFWSkiaBackend::GLFWSkiaBackend(GLFWwindow* window, bool)
     layer.pixelFormat = MTLPixelFormatBGRA8Unorm;
     layer.framebufferOnly = YES;
     layer.contentsGravity = kCAGravityTopLeft;
+    layer.contentsScale = nsWindow.backingScaleFactor;
     layer.drawableSize = CGSizeMake(static_cast<CGFloat>(std::max<uint32_t>(1, size.width)),
                                     static_cast<CGFloat>(std::max<uint32_t>(1, size.height)));
 
-    nsWindow.contentView.wantsLayer = YES;
+    // Order matters: assign the layer first to make the view layer-hosting, then
+    // request layer-backing. Reversing this leaves AppKit's default layer in place.
     nsWindow.contentView.layer = layer;
+    nsWindow.contentView.wantsLayer = YES;
 
     metalLayer = (__bridge_retained void*)layer;
     rendererBackend.attachMetalLayer(metalLayer);

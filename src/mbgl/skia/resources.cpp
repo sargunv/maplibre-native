@@ -91,6 +91,9 @@ void RenderableResource::flush() {
         if (liveSurface && directContext) {
             skgpu::ganesh::FlushAndSubmit(liveSurface);
         }
+        // FlushAndSubmit instantiates the lazy proxy, which is when Skia writes
+        // the CFRetained drawable handle into liveDrawable via the pointer we
+        // gave WrapCAMetalLayer.
         if (liveDrawable) {
             void* drawable = liveDrawable;
             liveDrawable = nullptr;
@@ -106,11 +109,11 @@ void RenderableResource::flush() {
 void RenderableResource::ensureSurface() {
     if (!metalLayer) return;
     if (liveSurface) return;
-    void* drawable = nullptr;
-    auto surface = wrapMetalLayerSurface(directContext, metalLayer, &drawable);
+    // Pass a pointer to the resource-owned slot. Skia writes the drawable into
+    // it during flushAndSubmit, not during this call.
+    auto surface = wrapMetalLayerSurface(directContext, metalLayer, &liveDrawable);
     if (surface) {
         liveSurface = std::move(surface);
-        liveDrawable = drawable;
     }
 }
 

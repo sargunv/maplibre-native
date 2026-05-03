@@ -67,8 +67,11 @@ GaneshGpuContext makeDefaultGaneshContext();
 bool clipCanvasToTileForTests(SkCanvas&, const mat4&, Size);
 
 // Acquire the next drawable from a CAMetalLayer (bridged void*) and wrap its
-// texture in a Skia surface. Writes the CFRetained drawable into *outDrawable.
-// Returns nullptr on non-Metal builds.
+// texture in a Skia surface. Skia defers the actual drawable acquisition to
+// when the proxy is instantiated (inside flushAndSubmit), and writes the
+// CFRetained drawable through the passed-in pointer. The pointer must remain
+// valid until after flushAndSubmit completes. Returns nullptr on non-Metal
+// builds.
 sk_sp<SkSurface> wrapMetalLayerSurface(GrDirectContext* context, void* metalLayer, void** outDrawable);
 
 // Submit a present-drawable command on a fresh MTLCommandBuffer from the
