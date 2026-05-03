@@ -205,6 +205,7 @@ void RenderCircleLayer::update(gfx::ShaderRegistry& shaders,
         [&](gfx::Drawable& drawable) { return drawable.getTileID() && !hasRenderTile(*drawable.getTileID()); });
 
     const auto& evaluated = static_cast<const CircleLayerProperties&>(*evaluatedProperties).evaluated;
+    const bool sortFeaturesByKey = !impl_cast(baseImpl).layout.get<style::CircleSortKey>().isUndefined();
     StringIDSetsPair propertiesAsUniforms;
 
     for (const RenderTile& tile : *renderTiles) {
@@ -265,29 +266,41 @@ void RenderCircleLayer::update(gfx::ShaderRegistry& shaders,
                                    gfx::AttributeDataType::Short2);
         }
 
-        circleBuilder = context.createDrawableBuilder("circle");
-        circleBuilder->setShader(std::static_pointer_cast<gfx::ShaderProgramBase>(circleShader));
-        circleBuilder->setDepthType(gfx::DepthMaskType::ReadOnly);
-        circleBuilder->setColorMode(gfx::ColorMode::alphaBlended());
-        circleBuilder->setCullFaceMode(gfx::CullFaceMode::disabled());
+        const auto addCircleDrawable = [&](const SegmentBase* segments,
+                                           const std::size_t segmentCount,
+                                           const gfx::DrawPriority drawPriority) {
+            circleBuilder = context.createDrawableBuilder("circle");
+            circleBuilder->setShader(std::static_pointer_cast<gfx::ShaderProgramBase>(circleShader));
+            circleBuilder->setDepthType(gfx::DepthMaskType::ReadOnly);
+            circleBuilder->setColorMode(gfx::ColorMode::alphaBlended());
+            circleBuilder->setCullFaceMode(gfx::CullFaceMode::disabled());
 
-        circleBuilder->setRenderPass(renderPass);
-        circleBuilder->setVertexAttributes(std::move(circleVertexAttrs));
+            circleBuilder->setRenderPass(renderPass);
+            circleBuilder->setDrawPriority(drawPriority);
+            circleBuilder->setVertexAttributes(circleVertexAttrs);
 
-        circleBuilder->setRawVertices({}, vertexCount, gfx::AttributeDataType::Short2);
-        circleBuilder->setSegments(
-            gfx::Triangles(), bucket.sharedTriangles, bucket.segments.data(), bucket.segments.size());
+            circleBuilder->setRawVertices({}, vertexCount, gfx::AttributeDataType::Short2);
+            circleBuilder->setSegments(gfx::Triangles(), bucket.sharedTriangles, segments, segmentCount);
 
-        circleBuilder->flush(context);
+            circleBuilder->flush(context);
 
-        for (auto& drawable : circleBuilder->clearDrawables()) {
-            drawable->setTileID(tileID);
-            drawable->setLayerTweaker(layerTweaker);
-            drawable->setBinders(renderData->bucket, &paintPropertyBinders);
-            drawable->setRenderTile(renderTilesOwner, &tile);
+            for (auto& drawable : circleBuilder->clearDrawables()) {
+                drawable->setTileID(tileID);
+                drawable->setLayerTweaker(layerTweaker);
+                drawable->setBinders(renderData->bucket, &paintPropertyBinders);
+                drawable->setRenderTile(renderTilesOwner, &tile);
 
-            tileLayerGroup->addDrawable(renderPass, tileID, std::move(drawable));
-            ++stats.drawablesAdded;
+                tileLayerGroup->addDrawable(renderPass, tileID, std::move(drawable));
+                ++stats.drawablesAdded;
+            }
+        };
+
+        if (sortFeaturesByKey) {
+            for (const auto& segment : bucket.segments) {
+                addCircleDrawable(&segment, 1, static_cast<gfx::DrawPriority>(segment.sortKey * 1000000.0f));
+            }
+        } else {
+            addCircleDrawable(bucket.segments.data(), bucket.segments.size(), 0);
         }
     }
 }

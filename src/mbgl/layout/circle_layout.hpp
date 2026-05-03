@@ -20,7 +20,7 @@ public:
         assert(!group.empty());
         auto leaderLayerProperties = staticImmutableCast<style::CircleLayerProperties>(group.front());
         const auto& unevaluatedLayout = leaderLayerProperties->layerImpl().layout;
-        const bool sortFeaturesByKey = !unevaluatedLayout.get<style::CircleSortKey>().isUndefined();
+        sortFeaturesByKey = !unevaluatedLayout.get<style::CircleSortKey>().isUndefined();
         const auto& layout = unevaluatedLayout.evaluate(PropertyEvaluationParameters(zoom));
         sourceLayerID = leaderLayerProperties->layerImpl().sourceLayer;
         bucketLeaderID = leaderLayerProperties->layerImpl().id;
@@ -67,7 +67,7 @@ public:
             const std::unique_ptr<GeometryTileFeature>& feature = circleFeature.feature;
             const GeometryCollection& geometries = feature->getGeometries();
 
-            addCircle(*bucket, *feature, geometries, i, circleFeature.sortKey, canonical);
+            addCircle(*bucket, *feature, geometries, i, circleFeature.sortKey, sortFeaturesByKey, canonical);
 
             bucket->addFeature(*feature, geometries, {}, PatternLayerMap(), i, canonical);
             featureIndex->insert(geometries, i, sourceLayerID, bucketLeaderID);
@@ -94,6 +94,7 @@ private:
                    const GeometryCollection& geometry,
                    std::size_t featureIndex,
                    float sortKey,
+                   bool separateSegmentsBySortKey,
                    const CanonicalTileID& canonical) {
         constexpr const uint16_t vertexLength = 4;
 
@@ -112,9 +113,9 @@ private:
                 if ((mode == MapMode::Continuous) && (x < 0 || x >= util::EXTENT || y < 0 || y >= util::EXTENT))
                     continue;
 
-                if (segments.empty() ||
+                if (segments.empty() || separateSegmentsBySortKey || segments.back().sortKey != sortKey ||
                     segments.back().vertexLength + vertexLength > std::numeric_limits<uint16_t>::max()) {
-                    // Move to a new segments because the old one can't hold the geometry.
+                    // Move to a new segment when the old one can't hold the geometry or when draw order changes.
                     segments.emplace_back(vertices.elements(), triangles.elements(), 0ul, 0ul, sortKey);
                 }
 
@@ -156,6 +157,7 @@ private:
 
     const std::unique_ptr<GeometryTileLayer> sourceLayer;
     std::list<CircleFeature> features;
+    bool sortFeaturesByKey = false;
 
     const float zoom;
     const MapMode mode;

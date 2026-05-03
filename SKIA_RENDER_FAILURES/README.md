@@ -18,11 +18,11 @@ SKIA_RENDER_FAILURES/
 
 - Sweep date: 2026-05-02
 - Command: `/usr/bin/time -p build-macos-skia/mbgl-render-test-runner --manifestPath metrics/macos-skia.json`
-- Result: `1271 passed`, `12 ignored-passed`, `79 ignored`, `40 failed`
-- Full output: `/Users/sargunv/.local/share/opencode/tool-output/tool_dea4fa97e001bZsQpjauUBhNv7`
+- Result: `1272 passed`, `12 ignored-passed`, `79 ignored`, `39 failed`
+- Full output: `/Users/sargunv/.local/share/opencode/tool-output/tool_dec561cad001vp56vZjzLExOmD`
 - Generated report: `metrics/macos-skia.html`
 
-The active workpads are based on the generated `actual.png`, `expected.png`, and `diff.png` artifacts from that sweep. There are currently 40 active workpads.
+The active workpads are based on the generated `actual.png`, `expected.png`, and `diff.png` artifacts from that sweep. There are currently 39 active workpads.
 
 ## Active Policy
 

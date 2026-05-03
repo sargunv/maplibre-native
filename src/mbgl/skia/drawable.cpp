@@ -680,8 +680,10 @@ sk_sp<SkMeshSpecification> fillExtrusionPatternMeshSpecification() {
     return specification;
 }
 
-sk_sp<SkMeshSpecification> lineMeshSpecification() {
-    static sk_sp<SkMeshSpecification> specification;
+sk_sp<SkMeshSpecification> lineMeshSpecification(const bool unpremultiplyColor) {
+    static sk_sp<SkMeshSpecification> premultipliedSpecification;
+    static sk_sp<SkMeshSpecification> unpremultipliedSpecification;
+    auto& specification = unpremultiplyColor ? unpremultipliedSpecification : premultipliedSpecification;
     if (specification) {
         return specification;
     }
@@ -717,7 +719,7 @@ sk_sp<SkMeshSpecification> lineMeshSpecification() {
         }
     )");
 
-    const SkString fragmentShader(R"(
+    const SkString premultipliedFragmentShader(R"(
         float2 main(const Varyings varyings, out half4 color) {
             float dist = length(varyings.normal) * varyings.width.x;
             float blur = varyings.blur + 1.0;
@@ -727,13 +729,25 @@ sk_sp<SkMeshSpecification> lineMeshSpecification() {
         }
     )");
 
-    auto [spec, error] = SkMeshSpecification::Make(attributes,
-                                                   sizeof(MeshVertex),
-                                                   varyings,
-                                                   vertexShader,
-                                                   fragmentShader,
-                                                   SkColorSpace::MakeSRGB(),
-                                                   kPremul_SkAlphaType);
+    const SkString unpremultipliedFragmentShader(R"(
+        float2 main(const Varyings varyings, out half4 color) {
+            float dist = length(varyings.normal) * varyings.width.x;
+            float blur = varyings.blur + 1.0;
+            float alpha = clamp(min(dist - (varyings.width.y - blur), varyings.width.x - dist) / blur, 0.0, 1.0);
+            float4 premul = varyings.color * alpha;
+            color = half4(varyings.color.a < 0.999 && premul.a > 0.0 ? float4(premul.rgb / premul.a, premul.a) : premul);
+            return varyings.position;
+        }
+    )");
+
+    auto [spec, error] = SkMeshSpecification::Make(
+        attributes,
+        sizeof(MeshVertex),
+        varyings,
+        vertexShader,
+        unpremultiplyColor ? unpremultipliedFragmentShader : premultipliedFragmentShader,
+        SkColorSpace::MakeSRGB(),
+        kPremul_SkAlphaType);
     (void)error;
     specification = std::move(spec);
     return specification;
@@ -2638,6 +2652,7 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
     float lineFloorWidthT = 0.0f;
     float lineRatio = 1.0f;
     bool lineDrawable = false;
+    bool lineUsesPremultipliedColor = false;
     bool circleDrawable = false;
     float circleColorT = 0.0f;
     float circleRadius = 1.0f;
@@ -3237,6 +3252,7 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
         }
         if (lineDrawableUBO) {
             lineDrawable = true;
+            lineUsesPremultipliedColor = isFillOutlineTriangulated;
             matrix = lineDrawableUBO->matrix;
             colorT = lineDrawableUBO->color_t;
             lineBlurT = lineDrawableUBO->blur_t;
@@ -3425,7 +3441,7 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
             }
         }
     } else if (const auto* drawableUBO = getUBO<shaders::FillDrawableUBO>(&getUniformBuffers(),
-                                                                           shaders::idFillDrawableUBO)) {
+                                                                          shaders::idFillDrawableUBO)) {
         solidFillDrawable = true;
         matrix = drawableUBO->matrix;
         colorT = drawableUBO->color_t;
@@ -3513,7 +3529,7 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
         if (backgroundPatternDrawable) return backgroundPatternMeshSpecification();
         if (fillPatternDrawable) return fillPatternMeshSpecification();
         if (circleDrawable) return circleMeshSpecification();
-        if (lineDrawable) return lineMeshSpecification();
+        if (lineDrawable) return lineMeshSpecification(!lineUsesPremultipliedColor);
         return solidColorMeshSpecification();
     }();
     if (!specification) {

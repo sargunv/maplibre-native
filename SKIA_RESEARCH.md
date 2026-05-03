@@ -308,7 +308,7 @@ Current rendering limitations:
 
 Initial 2D parity target: every render test must be in one of three states before the backend can graduate from experimental: already ignored on main before the Skia branch, passing with Skia, or failing with a narrowly documented deferral reason. Expected deferrals should be exceptional; fill extrusion cases that require fixed-function depth-buffer semantics are the known acceptable class. Other failures should be treated as fix-required unless a similarly strong blocker is identified.
 
-Current full-suite baseline from 2026-05-02 after solid-fill premultiply parity: 1260 passed, 12 ignored passed, 79 ignored, and 51 failed. The Skia manifest includes `ignores/platform-macos.json`, so tests already ignored by the main macOS render-test baseline are classified as inherited ignores rather than Skia-specific failures. Ten failures are in fill-extrusion families and may qualify for depth-semantics deferral after case-by-case review. The remaining failures are fix-required under the parity target.
+Current full-suite baseline from 2026-05-02 after circle sort-key and line premultiplication fixes: 1272 passed, 12 ignored passed, 79 ignored, and 39 failed. The Skia manifest includes `ignores/platform-macos.json`, so tests already ignored by the main macOS render-test baseline are classified as inherited ignores rather than Skia-specific failures. Remaining fill-extrusion/projection failures may qualify for depth-semantics deferral after case-by-case review. The other failures are fix-required under the parity target.
 
 Skia symbol shaders must use the same column-major rotation signs as the GLSL `mat2(angle_cos, -angle_sin, angle_sin, angle_cos)` expression. Matching those signs fixed broad text and icon placement clusters, including pitch alignment, writing modes, line placement, formatted text, and several debug/regression cases.
 
@@ -317,6 +317,10 @@ Collision-box debug drawing should use hard `SkPaint` strokes, not antialiased s
 Line-gradient ramp lookups should sample at texel centers in Skia's pixel-coordinate image-shader space. GL samples the generated 256-pixel ramp through normalized texture coordinates, so Skia uses `line_progress * 255 + 0.5` for equivalent ramp interpolation.
 
 Solid-color mesh fragments receive CPU-premultiplied vertex colors for shared packing, but Skia's premultiplied mesh specification also premultiplies fragment output for blending. Solid-color fragments therefore unpremultiply before returning color, matching GL's single-premultiply blending behavior for translucent fills and real-world styles.
+
+Sorted circle features must become separately ordered drawables in the Skia path because a single mesh drawable preserves segment order but cannot interleave sorted feature segments through `TileLayerGroup` draw priority ordering. Segmenting by sort key and assigning draw priority fixed `circle-sort-key/literal`.
+
+Line mesh fragments need the same single-premultiply behavior as solid fills for ordinary line layers. Shared vertex color packing supplies premultiplied color, and Skia's premultiplied mesh output would premultiply again; unpremultiplying translucent line output fixed `line-triangulation/round`. Triangulated fill outlines keep premultiplied line output because their color data path already matches the outline expectations.
 
 ## Placeholder Rendering Cleanup
 

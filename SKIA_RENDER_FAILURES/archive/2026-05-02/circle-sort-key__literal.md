@@ -1,6 +1,8 @@
+> Archived 2026-05-02 after pending commit fixed Skia circle sort-key draw ordering.
+
 # render-tests/circle-sort-key/literal
 
-- Status: active
+- Status: archived
 - Last sweep: 2026-05-02
 - Style: `metrics/integration/render-tests/circle-sort-key/literal/style.json`
 - Artifacts: `actual.png`, `expected.png`, `diff.png`
@@ -26,8 +28,9 @@ Check the circle sort comparator/order before upload and draw in the Skia path.
 
 ## Work Log
 
+- 2026-05-02: Passed focused filter and full Skia sweep after sorted circle features were emitted into separate draw-priority-ordered drawables.
 - 2026-05-02: Created from full Skia sweep and circle/heatmap inspection batch.
 
 ## Resolution
 
-Move to `archive/<YYYY-MM-DD>/` after a focused pass and full sweep pass.
+Archived after a focused pass and full sweep pass.

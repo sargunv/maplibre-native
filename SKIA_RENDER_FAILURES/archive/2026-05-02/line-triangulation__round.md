@@ -1,6 +1,8 @@
+> Archived 2026-05-02 after pending commit fixed Skia line premultiplied-alpha blending.
+
 # render-tests/line-triangulation/round
 
-- Status: active
+- Status: archived
 - Last sweep: 2026-05-02
 - Style: `metrics/integration/render-tests/line-triangulation/round/style.json`
 - Artifacts: `actual.png`, `expected.png`, `diff.png`
@@ -26,8 +28,9 @@ Render the same geometry with `line-opacity: 1`, then with miter/bevel joins, to
 
 ## Work Log
 
+- 2026-05-02: Passed focused filter and full Skia sweep after translucent line mesh colors were unpremultiplied before Skia's premultiplied output conversion.
 - 2026-05-02: Created from full Skia sweep and line/pattern inspection batch.
 
 ## Resolution
 
-Move to `archive/<YYYY-MM-DD>/` after a focused pass and full sweep pass.
+Archived after a focused pass and full sweep pass.
