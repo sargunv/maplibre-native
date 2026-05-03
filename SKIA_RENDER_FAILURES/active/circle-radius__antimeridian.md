@@ -26,6 +26,7 @@ Inspect Skia circle bucket/tile wrap handling at zoom 0 for point features near 
 
 ## Work Log
 
+- 2026-05-02: Tested disabling Skia tile clipping and then a Skia-local circle wrap-offset draw under the existing tile clip. Neither produced the missing left-edge copy, and the wrap-offset shader probe made the circle mesh invalid, so the likely fix is earlier world-wrap/tile selection or bucket geometry duplication rather than render-pass clipping.
 - 2026-05-02: Created from full Skia sweep and circle/heatmap inspection batch.
 
 ## Resolution

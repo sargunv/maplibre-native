@@ -26,6 +26,7 @@ Probe each dasharray in isolation and compare row-by-row alpha masks, especially
 
 ## Work Log
 
+- 2026-05-02: Tested adding a Skia texel-center `+0.5` offset to line SDF atlas sampling. Focused run still failed, so the issue is not the same normalized-to-pixel sampling offset as line-gradient ramps.
 - 2026-05-02: Created from full Skia sweep and line/pattern inspection batch.
 
 ## Resolution
