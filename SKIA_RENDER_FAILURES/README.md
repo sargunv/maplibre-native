@@ -22,7 +22,7 @@ SKIA_RENDER_FAILURES/
 - Full output: `/Users/sargunv/.local/share/opencode/tool-output/tool_dec561cad001vp56vZjzLExOmD`
 - Generated report: `metrics/macos-skia.html`
 
-The active workpads are based on the generated `actual.png`, `expected.png`, and `diff.png` artifacts from that sweep. There are currently 39 active workpads.
+Since 2026-05-02, `background-pattern/pitch` was archived (perspective correction + near-plane clip), so the next full sweep should report `1273 passed` and `38 failed`. There are currently 38 active workpads.
 
 ## Active Policy
 
