@@ -2409,7 +2409,8 @@ sk_sp<SkMeshSpecification> backgroundPatternMeshSpecification() {
     using Varying = SkMeshSpecification::Varying;
     const Attribute attributes[] = {{Attribute::Type::kFloat2, offsetof(MeshVertex, position), SkString("a_pos")}};
     const Varying varyings[] = {{Varying::Type::kFloat2, SkString("pos_a")},
-                                {Varying::Type::kFloat2, SkString("pos_b")}};
+                                {Varying::Type::kFloat2, SkString("pos_b")},
+                                {Varying::Type::kFloat, SkString("inv_w")}};
 
     const SkString vertexShader(R"(
         uniform float4x4 u_matrix;
@@ -2438,8 +2439,9 @@ sk_sp<SkMeshSpecification> backgroundPatternMeshSpecification() {
             float2 ndc = projected.xy * inv_w;
             varyings.position = float2((ndc.x * 0.5 + 0.5) * u_viewport.x,
                                        (0.5 - ndc.y * 0.5) * u_viewport.y);
-            varyings.pos_a = get_pattern_pos(u_scale_a * u_pattern_size_a, attrs.a_pos);
-            varyings.pos_b = get_pattern_pos(u_scale_b * u_pattern_size_b, attrs.a_pos);
+            varyings.pos_a = get_pattern_pos(u_scale_a * u_pattern_size_a, attrs.a_pos) * inv_w;
+            varyings.pos_b = get_pattern_pos(u_scale_b * u_pattern_size_b, attrs.a_pos) * inv_w;
+            varyings.inv_w = inv_w;
             return varyings;
         }
     )");
@@ -2462,8 +2464,11 @@ sk_sp<SkMeshSpecification> backgroundPatternMeshSpecification() {
         }
 
         float2 main(const Varyings varyings, out half4 color) {
-            float2 imagecoord_a = mod_positive(varyings.pos_a, 1.0);
-            float2 imagecoord_b = mod_positive(varyings.pos_b, 1.0);
+            float inv_w = varyings.inv_w == 0.0 ? 1.0 : varyings.inv_w;
+            float2 pos_a = varyings.pos_a / inv_w;
+            float2 pos_b = varyings.pos_b / inv_w;
+            float2 imagecoord_a = mod_positive(pos_a, 1.0);
+            float2 imagecoord_b = mod_positive(pos_b, 1.0);
             float4 color_a = u_image.eval(mix2(u_pattern_tl_a, u_pattern_br_a, imagecoord_a));
             float4 color_b = u_image.eval(mix2(u_pattern_tl_b, u_pattern_br_b, imagecoord_b));
             color = half4(mix(color_a, color_b, u_mix) * u_opacity);
@@ -4433,7 +4438,8 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
     std::vector<std::uint16_t> clippedIndexes;
     const auto* drawIndexes = &sharedIndexes->vector();
     bool clippedProjected = false;
-    if ((rasterDrawable || solidFillDrawable) && needsProjectedClipping(meshVertices, *drawIndexes, matrix)) {
+    if ((rasterDrawable || solidFillDrawable || backgroundPatternDrawable) &&
+        needsProjectedClipping(meshVertices, *drawIndexes, matrix)) {
         clippedIndexes = *drawIndexes;
         if (clipProjectedTriangles(meshVertices, clippedIndexes, matrix)) {
             drawIndexes = &clippedIndexes;
