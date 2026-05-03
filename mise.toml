@@ -35,3 +35,18 @@ run = "pixi run cmake --build build-skia-render-test --target mbgl-render-test-r
 [tasks.skia-render-test]
 description = "Run Skia render tests; pass a regex filter after --"
 run = "./build-skia-render-test/mbgl-render-test-runner -p metrics/ios-metal-render-test-runner-style.json -f \"{{arg(name='filter', default='fill-color/default')}}\""
+
+[tasks.skia-glfw-configure]
+description = "Configure the Skia GLFW demo build"
+run = "pixi run cmake -S . -B build-macos-skia -G Ninja -DMLN_WITH_SKIA=ON -DMLN_WITH_GLFW=ON -DMLN_WITH_METAL=OFF -DMLN_WITH_OPENGL=OFF -DMLN_WITH_WERROR=ON -DCMAKE_BUILD_TYPE=Debug"
+
+[tasks.skia-glfw-build]
+description = "Build the Skia GLFW demo"
+run = "pixi run cmake --build build-macos-skia --target mbgl-glfw"
+
+[tasks.skia-glfw]
+description = "Build and run the Skia GLFW demo (macOS)"
+run = [
+  "pixi run cmake --build build-macos-skia --target mbgl-glfw",
+  "./build-macos-skia/platform/glfw/mbgl-glfw --backend skia",
+]
