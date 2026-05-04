@@ -73,9 +73,21 @@ std::optional<SkPath> tileClipPath(const PaintParameters& parameters,
     return tileClipPath(parameters.matrixForTile(tileID), canvasSize);
 }
 
+// Per-render-pass cache for tile clip paths. tileClipPath() projects the four
+// tile corners every call; many consecutive drawables share the same tile, so
+// remembering the last tile/path saves a few matrix multiplications per
+// drawable. Stored as a struct so it can be passed by reference into
+// drawWithTileClip.
+struct TileClipPathCache {
+    std::optional<OverscaledTileID> lastTileID;
+    std::optional<SkPath> lastPath;
+    Size lastCanvasSize{0, 0};
+};
+
 void drawWithTileClip(gfx::Drawable& drawable,
                       PaintParameters& parameters,
-                      const gfx::UniformBufferArray* uniformBuffers) {
+                      const gfx::UniformBufferArray* uniformBuffers,
+                      TileClipPathCache* cache = nullptr) {
     auto& skiaDrawable = static_cast<Drawable&>(drawable);
     auto* renderPass = static_cast<RenderPass*>(parameters.renderPass.get());
     auto* canvas = renderPass ? renderPass->getCanvas() : nullptr;
@@ -85,7 +97,22 @@ void drawWithTileClip(gfx::Drawable& drawable,
         const auto layerSize = canvas->getBaseLayerSize();
         const Size canvasSize{static_cast<uint32_t>(layerSize.width()),
                               static_cast<uint32_t>(layerSize.height())};
-        const auto path = tileClipPath(parameters, tileID->toUnwrapped(), canvasSize);
+
+        std::optional<SkPath> path;
+        const auto& tileIDValue = *tileID;
+        if (cache && cache->lastTileID && *cache->lastTileID == tileIDValue &&
+            cache->lastCanvasSize.width == canvasSize.width &&
+            cache->lastCanvasSize.height == canvasSize.height) {
+            path = cache->lastPath;
+        } else {
+            path = tileClipPath(parameters, tileIDValue.toUnwrapped(), canvasSize);
+            if (cache) {
+                cache->lastTileID = tileIDValue;
+                cache->lastPath = path;
+                cache->lastCanvasSize = canvasSize;
+            }
+        }
+
         if (path) {
             SkAutoCanvasRestore autoRestore(canvas, true);
             canvas->clipPath(*path, SkClipOp::kIntersect, false);
@@ -148,11 +175,12 @@ void TileLayerGroup::render(RenderOrchestrator&, PaintParameters& parameters) {
         return a.z < b.z;
     });
 
+    TileClipPathCache clipCache;
     for (const auto& entry : ordered) {
         for (const auto& tweaker : entry.drawable->getTweakers()) {
             tweaker->execute(*entry.drawable, parameters);
         }
-        drawWithTileClip(*entry.drawable, parameters, uniformBuffers.get());
+        drawWithTileClip(*entry.drawable, parameters, uniformBuffers.get(), &clipCache);
     }
 }
 
