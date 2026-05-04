@@ -4438,8 +4438,16 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
     std::vector<std::uint16_t> clippedIndexes;
     const auto* drawIndexes = &sharedIndexes->vector();
     bool clippedProjected = false;
-    if ((rasterDrawable || solidFillDrawable || backgroundPatternDrawable) &&
-        needsProjectedClipping(meshVertices, *drawIndexes, matrix)) {
+    // Mesh types whose triangle list crosses the near plane need CPU clipping
+    // before drawing, otherwise vertices behind the camera project to extreme
+    // NDC and individual triangles fan out across the entire canvas as huge
+    // slashes. Lines are rendered as triangle strips of extruded segments and
+    // suffer the same way at high pitch (visible cream-colored highway slashes
+    // across the horizon area at pitch 85).
+    const bool eligibleForProjectedClip = rasterDrawable || solidFillDrawable || backgroundPatternDrawable ||
+                                          lineDrawable || linePatternDrawable || lineGradientDrawable ||
+                                          lineSDFDrawable;
+    if (eligibleForProjectedClip && needsProjectedClipping(meshVertices, *drawIndexes, matrix)) {
         clippedIndexes = *drawIndexes;
         if (clipProjectedTriangles(meshVertices, clippedIndexes, matrix)) {
             drawIndexes = &clippedIndexes;
