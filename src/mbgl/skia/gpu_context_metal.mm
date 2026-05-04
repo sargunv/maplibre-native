@@ -1,5 +1,6 @@
 #include "skia_impl.hpp"
 
+#include <include/core/SkColorSpace.h>
 #include <include/gpu/ganesh/GrDirectContext.h>
 #include <include/gpu/ganesh/mtl/GrMtlBackendContext.h>
 #include <include/gpu/ganesh/mtl/GrMtlDirectContext.h>
@@ -83,7 +84,7 @@ sk_sp<SkSurface> wrapMetalLayerSurface(GrDirectContext* context, void* metalLaye
                                         kTopLeft_GrSurfaceOrigin,
                                         /*sampleCnt=*/1,
                                         kBGRA_8888_SkColorType,
-                                        /*colorSpace=*/nullptr,
+                                        SkColorSpace::MakeSRGB(),
                                         /*surfaceProps=*/nullptr,
                                         const_cast<GrMTLHandle*>(reinterpret_cast<const GrMTLHandle*>(outDrawable)));
 #else

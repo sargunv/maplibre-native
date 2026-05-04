@@ -3,6 +3,7 @@
 #include <mbgl/util/image.hpp>
 #include <mbgl/util/size.hpp>
 
+#include <include/core/SkColorSpace.h>
 #include <include/gpu/ganesh/GrDirectContext.h>
 #include <include/gpu/ganesh/SkSurfaceGanesh.h>
 
@@ -40,7 +41,14 @@ SkColor4f toSkColor(const Color& color) {
 
 RenderableResource::RenderableResource(Size size_, GrDirectContext* directContext_)
     : directContext(directContext_), size(size_) {
-    const auto info = makeImageInfo(size, gfx::TexturePixelType::RGBA, gfx::TextureChannelDataType::UnsignedByte);
+    // Tag the surface as sRGB so the Mesh specs' MakeSRGB() output color
+    // space matches and no extra sRGB→linear conversion happens. Without
+    // this, Skia treats the surface as "untagged" (effectively linear) and
+    // the conversion darkens mid-range values — vivid colors at 0 or 1
+    // are gamma-invariant and look correct, but light grays render
+    // noticeably too dark.
+    auto info = makeImageInfo(size, gfx::TexturePixelType::RGBA, gfx::TextureChannelDataType::UnsignedByte)
+                     .makeColorSpace(SkColorSpace::MakeSRGB());
     if (directContext) {
         staticSurface = SkSurfaces::RenderTarget(
             directContext, skgpu::Budgeted::kNo, info, 0, kTopLeft_GrSurfaceOrigin, nullptr);
