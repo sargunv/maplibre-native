@@ -7,9 +7,13 @@
 
 #include <include/core/SkPath.h>
 
+#include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdint>
+#include <limits>
 #include <optional>
+#include <vector>
 
 namespace mbgl {
 namespace skia {
@@ -105,17 +109,43 @@ void TileLayerGroup::render(RenderOrchestrator&, PaintParameters& parameters) {
         return;
     }
 
+    // Skia has no stencil buffer to mask painted areas, so without ordering
+    // intervention coarser-zoom tiles can paint over finer ones when both are
+    // present (overscan, multi-LOD selection, low-zoom views with wrap copies).
+    // Render back-to-front by tile zoom: coarsest first, finest last, so the
+    // higher-detail tile always wins the overlap. stable_sort preserves the
+    // priority/ID order from sortedDrawables for ties.
+    struct OrderedDrawable {
+        gfx::Drawable* drawable = nullptr;
+        std::int32_t z = 0;
+    };
+    std::vector<OrderedDrawable> ordered;
+    ordered.reserve(getDrawableCount());
+
     visitDrawables([&](gfx::Drawable& drawable) {
         if (!drawable.getEnabled() || !drawable.hasRenderPass(parameters.pass)) {
             return;
         }
-
-        for (const auto& tweaker : drawable.getTweakers()) {
-            tweaker->execute(drawable, parameters);
+        OrderedDrawable entry;
+        entry.drawable = &drawable;
+        if (const auto& tileID = drawable.getTileID()) {
+            entry.z = static_cast<std::int32_t>(tileID->overscaledZ);
+        } else {
+            entry.z = std::numeric_limits<std::int32_t>::min();
         }
-
-        drawWithTileClip(drawable, parameters, uniformBuffers.get());
+        ordered.push_back(entry);
     });
+
+    std::stable_sort(ordered.begin(), ordered.end(), [](const OrderedDrawable& a, const OrderedDrawable& b) {
+        return a.z < b.z;
+    });
+
+    for (const auto& entry : ordered) {
+        for (const auto& tweaker : entry.drawable->getTweakers()) {
+            tweaker->execute(*entry.drawable, parameters);
+        }
+        drawWithTileClip(*entry.drawable, parameters, uniformBuffers.get());
+    }
 }
 
 const gfx::UniformBufferArray& TileLayerGroup::getUniformBuffers() const {
