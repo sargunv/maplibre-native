@@ -546,8 +546,6 @@ sk_sp<SkMeshSpecification> fillExtrusionMeshSpecification() {
         uniform float3 u_light_color;
         uniform float u_light_intensity;
         uniform float u_vertical_gradient;
-        uniform float u_base;
-        uniform float u_height;
 
         Varyings main(const Attributes attrs) {
             Varyings varyings;
@@ -566,8 +564,11 @@ sk_sp<SkMeshSpecification> fillExtrusionMeshSpecification() {
             float max_directional = max(1.0 - luminance + u_light_intensity, 1.0);
             float directional = mix(min_directional, max_directional, directional_fraction);
             if (attrs.a_normal.y != 0.0) {
+                // attrs.a_t carries the per-vertex (t + clamped_base) *
+                // sqrt(clamped_height / 150) precomputed CPU-side, so
+                // data-driven base/height correctly affect the gradient.
                 float f_min = 0.7 + (0.98 - 0.7) * (1.0 - u_light_intensity);
-                float factor = clamp((attrs.a_t + u_base) * pow(u_height / 150.0, 0.5), f_min, 1.0);
+                float factor = clamp(attrs.a_t, f_min, 1.0);
                 directional *= (1.0 - u_vertical_gradient) + u_vertical_gradient * factor;
             }
             float3 min_light = 0.3 * (1.0 - u_light_color);
@@ -4164,11 +4165,18 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
                 vertexHeight = unpackMixFloat(packedHeight, fillExtrusionHeightT);
             }
             const auto isTopVertex = std::abs(normalEd[0] % 2) != 0;
-            meshVertices[i].fillExtrusionZ = std::max(isTopVertex ? vertexHeight : vertexBase, 0.0f);
+            const auto clampedBase = std::max(0.0f, vertexBase);
+            const auto clampedHeight = std::max(0.0f, vertexHeight);
+            meshVertices[i].fillExtrusionZ = isTopVertex ? clampedHeight : clampedBase;
             meshVertices[i].fillExtrusionNormal[0] = static_cast<float>(normalEd[0]);
             meshVertices[i].fillExtrusionNormal[1] = static_cast<float>(normalEd[1]);
             meshVertices[i].fillExtrusionNormal[2] = static_cast<float>(normalEd[2]);
-            meshVertices[i].fillExtrusionT = isTopVertex ? 1.0f : 0.0f;
+            // fillExtrusionT carries the precomputed argument to the vertical-
+            // gradient clamp in the shader. Done CPU-side so per-vertex
+            // (data-driven) base/height feed the lighting — matching what
+            // GL's #pragma initialise base / height does inside main().
+            const auto t = isTopVertex ? 1.0f : 0.0f;
+            meshVertices[i].fillExtrusionT = (t + clampedBase) * std::pow(clampedHeight / 150.0f, 0.5f);
             if (fillExtrusionPatternDrawable) {
                 auto vertexPatternFrom = fillPatternFrom;
                 auto vertexPatternTo = fillPatternTo;
@@ -4860,8 +4868,6 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
                      "u_vertical_gradient",
                      &fillExtrusionVerticalGradient,
                      sizeof(fillExtrusionVerticalGradient));
-        writeUniform(uniforms, *specification, "u_base", &fillExtrusionBase, sizeof(fillExtrusionBase));
-        writeUniform(uniforms, *specification, "u_height", &fillExtrusionHeight, sizeof(fillExtrusionHeight));
     } else if (fillPatternDrawable) {
         const float pixelRatio = parameters.pixelRatio;
         writeUniform(uniforms,
