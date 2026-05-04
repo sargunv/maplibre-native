@@ -295,6 +295,47 @@ private:
     Context& context;
 };
 
+// Densely-packed per-vertex data for SkMesh::Make. Filled per draw call from
+// the drawable's VertexAttributeArray and any layer/paint state. Lives on the
+// drawable as scratch storage so the heap allocation amortizes across frames.
+struct MeshVertex {
+    float position[2];
+    float fillExtrusionZ;
+    float fillExtrusionNormal[3];
+    float fillExtrusionT;
+    float color[4];
+    float lineNormal[2];
+    float lineWidth[2];
+    float lineBlur;
+    float lineProgress;
+    float lineFloorWidth;
+    float circleExtrude[2];
+    float circleColor[4];
+    float circleStrokeColor[4];
+    float circleData[4];
+    float rasterTexturePos[2];
+    float heatmapWeight[2];
+    float heatmapRadius[2];
+    float symbolPosOffset[4];
+    float symbolData[4];
+    float symbolPixelOffset[4];
+    float symbolProjectedPos[3];
+    float symbolFadeOpacity;
+    float symbolOpacity[2];
+    float symbolFillColor[4];
+    float symbolHaloColor[4];
+    float symbolHaloWidth[2];
+    float symbolHaloBlur[2];
+    float collisionAnchorPos[2];
+    float collisionExtrude[2];
+    float collisionPlaced[2];
+    float collisionShift[2];
+    float fillPatternPosA[2];
+    float fillPatternPosB[2];
+    float fillPatternFrom[4];
+    float fillPatternTo[4];
+};
+
 class Drawable final : public gfx::Drawable {
 public:
     explicit Drawable(std::string name);
@@ -321,6 +362,11 @@ private:
     std::size_t vertexCount = 0;
     gfx::AttributeDataType vertexDataType = gfx::AttributeDataType::Invalid;
     std::size_t positionAttributeId = 0;
+
+    // Per-draw scratch storage. Hoisted onto the drawable so the underlying
+    // heap allocations are reused across frames instead of reallocated.
+    mutable std::vector<MeshVertex> meshVertexScratch;
+    mutable std::vector<std::uint16_t> clippedIndexScratch;
 };
 
 class DrawableBuilder final : public gfx::DrawableBuilder {

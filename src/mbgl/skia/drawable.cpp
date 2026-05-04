@@ -174,44 +174,6 @@ struct UShort2Reader {
     }
 };
 
-struct MeshVertex {
-    float position[2];
-    float fillExtrusionZ;
-    float fillExtrusionNormal[3];
-    float fillExtrusionT;
-    float color[4];
-    float lineNormal[2];
-    float lineWidth[2];
-    float lineBlur;
-    float lineProgress;
-    float lineFloorWidth;
-    float circleExtrude[2];
-    float circleColor[4];
-    float circleStrokeColor[4];
-    float circleData[4];
-    float rasterTexturePos[2];
-    float heatmapWeight[2];
-    float heatmapRadius[2];
-    float symbolPosOffset[4];
-    float symbolData[4];
-    float symbolPixelOffset[4];
-    float symbolProjectedPos[3];
-    float symbolFadeOpacity;
-    float symbolOpacity[2];
-    float symbolFillColor[4];
-    float symbolHaloColor[4];
-    float symbolHaloWidth[2];
-    float symbolHaloBlur[2];
-    float collisionAnchorPos[2];
-    float collisionExtrude[2];
-    float collisionPlaced[2];
-    float collisionShift[2];
-    float fillPatternPosA[2];
-    float fillPatternPosB[2];
-    float fillPatternFrom[4];
-    float fillPatternTo[4];
-};
-
 struct Float4Reader {
     const gfx::VertexAttribute* attribute = nullptr;
     const std::uint8_t* data = nullptr;
@@ -4045,7 +4007,11 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
         }
     }
 
-    std::vector<MeshVertex> meshVertices(vertexReader.count);
+    // Reuse the drawable's scratch buffer to avoid re-allocating the dense
+    // MeshVertex array every frame. assign() zero-initialises and grows the
+    // buffer if needed; the underlying capacity is retained across frames.
+    auto& meshVertices = meshVertexScratch;
+    meshVertices.assign(vertexReader.count, MeshVertex{});
     for (std::size_t i = 0; i < vertexReader.count; ++i) {
         if (!vertexReader.read(
                 static_cast<std::uint16_t>(i), meshVertices[i].position[0], meshVertices[i].position[1])) {
@@ -4435,7 +4401,8 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
         }
     }
 
-    std::vector<std::uint16_t> clippedIndexes;
+    auto& clippedIndexes = clippedIndexScratch;
+    clippedIndexes.clear();
     const auto* drawIndexes = &sharedIndexes->vector();
     bool clippedProjected = false;
     if ((rasterDrawable || solidFillDrawable || backgroundPatternDrawable) &&
