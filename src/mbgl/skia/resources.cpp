@@ -1,11 +1,14 @@
 #include "skia_impl.hpp"
 
+#include <mbgl/util/image.hpp>
 #include <mbgl/util/size.hpp>
 
 #include <include/gpu/ganesh/GrDirectContext.h>
 #include <include/gpu/ganesh/SkSurfaceGanesh.h>
 
 #include <algorithm>
+#include <cstdlib>
+#include <fstream>
 
 namespace mbgl {
 namespace skia {
@@ -89,6 +92,42 @@ void RenderableResource::flush() {
     if (metalLayer) {
         ensureSurface();
         if (liveSurface && directContext) {
+            // Optional debug capture: when MLN_SKIA_FRAME_DUMP is set, snapshot
+            // the live SkSurface to a PNG before presenting. This is the only
+            // way to see what the live CAMetalLayer path actually drew without
+            // relying on screen capture; the headless render-test path uses a
+            // different RenderableResource constructor and won't reproduce
+            // bugs that live only in the layer-backed surface.
+            if (const char* dumpPath = std::getenv("MLN_SKIA_FRAME_DUMP")) {
+                // Capture a single frame from the live (CAMetalLayer-backed)
+                // path so we can inspect what was actually drawn without screen
+                // capture. The headless RenderableResource constructor uses a
+                // different surface, so render-test artifacts won't reproduce
+                // bugs that live only in the layer-backed path. Default frame
+                // is 30 (long enough for tiles to load); override via
+                // MLN_SKIA_FRAME_DUMP_FRAME.
+                static int frameNum = 0;
+                static bool dumped = false;
+                ++frameNum;
+                int targetFrame = 30;
+                if (const char* envFrame = std::getenv("MLN_SKIA_FRAME_DUMP_FRAME")) {
+                    targetFrame = std::atoi(envFrame);
+                }
+                if (!dumped && frameNum == targetFrame) {
+                    dumped = true;
+                    skgpu::ganesh::FlushAndSubmit(liveSurface);
+                    const auto width = liveSurface->width();
+                    const auto height = liveSurface->height();
+                    PremultipliedImage image(Size{static_cast<uint32_t>(width), static_cast<uint32_t>(height)});
+                    const auto info = SkImageInfo::Make(width, height, kRGBA_8888_SkColorType, kPremul_SkAlphaType);
+                    if (image.valid() &&
+                        liveSurface->readPixels(info, image.data.get(), image.stride(), 0, 0)) {
+                        auto encoded = encodePNG(image);
+                        std::ofstream out(dumpPath, std::ios::binary);
+                        out.write(encoded.data(), static_cast<std::streamsize>(encoded.size()));
+                    }
+                }
+            }
             skgpu::ganesh::FlushAndSubmit(liveSurface);
         }
         // FlushAndSubmit instantiates the lazy proxy, which is when Skia writes
