@@ -528,14 +528,26 @@ sk_sp<SkMeshSpecification> fillExtrusionMeshSpecification() {
 
     using Attribute = SkMeshSpecification::Attribute;
     using Varying = SkMeshSpecification::Varying;
+    // Lighting is computed in the vertex shader from a_color (the unlit
+    // base color, with paint-property opacity already pre-applied) plus the
+    // per-vertex normal/t and the layer-level light uniforms. The CPU-side
+    // path used to do this work per-vertex per-frame; the math is identical.
     const Attribute attributes[] = {{Attribute::Type::kFloat2, offsetof(MeshVertex, position), SkString("a_pos")},
                                     {Attribute::Type::kFloat, offsetof(MeshVertex, fillExtrusionZ), SkString("a_z")},
-                                    {Attribute::Type::kFloat4, offsetof(MeshVertex, color), SkString("a_color")}};
+                                    {Attribute::Type::kFloat4, offsetof(MeshVertex, color), SkString("a_color")},
+                                    {Attribute::Type::kFloat3, offsetof(MeshVertex, fillExtrusionNormal), SkString("a_normal")},
+                                    {Attribute::Type::kFloat, offsetof(MeshVertex, fillExtrusionT), SkString("a_t")}};
     const Varying varyings[] = {{Varying::Type::kFloat4, SkString("color")}};
 
     const SkString vertexShader(R"(
         uniform float4x4 u_matrix;
         uniform float2 u_viewport;
+        uniform float3 u_light_pos;
+        uniform float3 u_light_color;
+        uniform float u_light_intensity;
+        uniform float u_vertical_gradient;
+        uniform float u_base;
+        uniform float u_height;
 
         Varyings main(const Attributes attrs) {
             Varyings varyings;
@@ -544,7 +556,23 @@ sk_sp<SkMeshSpecification> fillExtrusionMeshSpecification() {
             float2 ndc = projected.xy * inv_w;
             varyings.position = float2((ndc.x * 0.5 + 0.5) * u_viewport.x,
                                        (0.5 - ndc.y * 0.5) * u_viewport.y);
-            varyings.color = attrs.a_color;
+
+            float3 base_rgb = attrs.a_color.rgb;
+            float opacity = attrs.a_color.a;
+            float luminance = dot(base_rgb, float3(0.2126, 0.7152, 0.0722));
+            float3 normalized = attrs.a_normal / 16384.0;
+            float directional_fraction = clamp(dot(normalized, u_light_pos), 0.0, 1.0);
+            float min_directional = 1.0 - u_light_intensity;
+            float max_directional = max(1.0 - luminance + u_light_intensity, 1.0);
+            float directional = mix(min_directional, max_directional, directional_fraction);
+            if (attrs.a_normal.y != 0.0) {
+                float f_min = 0.7 + (0.98 - 0.7) * (1.0 - u_light_intensity);
+                float factor = clamp((attrs.a_t + u_base) * pow(u_height / 150.0, 0.5), f_min, 1.0);
+                directional *= (1.0 - u_vertical_gradient) + u_vertical_gradient * factor;
+            }
+            float3 min_light = 0.3 * (1.0 - u_light_color);
+            float3 lit = clamp((base_rgb + 0.03) * directional * u_light_color, min_light, float3(1.0));
+            varyings.color = float4(lit * opacity, opacity);
             return varyings;
         }
     )");
@@ -4364,40 +4392,19 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
                 vertexOpacity = unpackMixFloat(packedOpacity, opacityT);
             }
             if (fillExtrusionDrawable) {
-                const auto luminance = vertexColor.fR * 0.2126f + vertexColor.fG * 0.7152f + vertexColor.fB * 0.0722f;
-                const auto normalScale = 1.0f / 16384.0f;
-                const auto directionalFraction = std::clamp(
-                    meshVertices[i].fillExtrusionNormal[0] * normalScale * fillExtrusionLightPosition[0] +
-                        meshVertices[i].fillExtrusionNormal[1] * normalScale * fillExtrusionLightPosition[1] +
-                        meshVertices[i].fillExtrusionNormal[2] * normalScale * fillExtrusionLightPosition[2],
-                    0.0f,
-                    1.0f);
-                const auto minDirectional = 1.0f - fillExtrusionLightIntensity;
-                const auto maxDirectional = std::max(1.0f - luminance + fillExtrusionLightIntensity, 1.0f);
-                auto directional = minDirectional + (maxDirectional - minDirectional) * directionalFraction;
-                if (meshVertices[i].fillExtrusionNormal[1] != 0.0f) {
-                    const auto fMin = 0.7f + (0.98f - 0.7f) * (1.0f - fillExtrusionLightIntensity);
-                    const auto factor = std::clamp((meshVertices[i].fillExtrusionT + fillExtrusionBase) *
-                                                       std::pow(fillExtrusionHeight / 150.0f, 0.5f),
-                                                   fMin,
-                                                   1.0f);
-                    directional *= (1.0f - fillExtrusionVerticalGradient) + fillExtrusionVerticalGradient * factor;
-                }
-                const auto minLightR = 0.3f * (1.0f - fillExtrusionLightColor[0]);
-                const auto minLightG = 0.3f * (1.0f - fillExtrusionLightColor[1]);
-                const auto minLightB = 0.3f * (1.0f - fillExtrusionLightColor[2]);
-                vertexColor.fR = std::clamp(
-                    (vertexColor.fR + 0.03f) * directional * fillExtrusionLightColor[0], minLightR, 1.0f);
-                vertexColor.fG = std::clamp(
-                    (vertexColor.fG + 0.03f) * directional * fillExtrusionLightColor[1], minLightG, 1.0f);
-                vertexColor.fB = std::clamp(
-                    (vertexColor.fB + 0.03f) * directional * fillExtrusionLightColor[2], minLightB, 1.0f);
+                // Pass the unlit color and opacity to the GPU; lighting is
+                // computed in fillExtrusionMeshSpecification's vertex shader.
+                meshVertices[i].color[0] = vertexColor.fR;
+                meshVertices[i].color[1] = vertexColor.fG;
+                meshVertices[i].color[2] = vertexColor.fB;
+                meshVertices[i].color[3] = vertexOpacity;
+            } else {
+                const auto premultiplied = premultiply(vertexColor, vertexOpacity);
+                meshVertices[i].color[0] = premultiplied.fR;
+                meshVertices[i].color[1] = premultiplied.fG;
+                meshVertices[i].color[2] = premultiplied.fB;
+                meshVertices[i].color[3] = premultiplied.fA;
             }
-            const auto premultiplied = premultiply(vertexColor, vertexOpacity);
-            meshVertices[i].color[0] = premultiplied.fR;
-            meshVertices[i].color[1] = premultiplied.fG;
-            meshVertices[i].color[2] = premultiplied.fB;
-            meshVertices[i].color[3] = premultiplied.fA;
         }
     }
 
@@ -4826,6 +4833,26 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
     } else if (fillExtrusionPatternDrawable) {
         writeUniform(uniforms, *specification, "u_fade", &fillPatternFade, sizeof(fillPatternFade));
         writeUniform(uniforms, *specification, "u_opacity", &fillExtrusionOpacity, sizeof(fillExtrusionOpacity));
+    } else if (fillExtrusionDrawable) {
+        writeUniform(uniforms,
+                     *specification,
+                     "u_light_pos",
+                     fillExtrusionLightPosition.data(),
+                     fillExtrusionLightPosition.size() * sizeof(float));
+        writeUniform(uniforms,
+                     *specification,
+                     "u_light_color",
+                     fillExtrusionLightColor.data(),
+                     fillExtrusionLightColor.size() * sizeof(float));
+        writeUniform(
+            uniforms, *specification, "u_light_intensity", &fillExtrusionLightIntensity, sizeof(fillExtrusionLightIntensity));
+        writeUniform(uniforms,
+                     *specification,
+                     "u_vertical_gradient",
+                     &fillExtrusionVerticalGradient,
+                     sizeof(fillExtrusionVerticalGradient));
+        writeUniform(uniforms, *specification, "u_base", &fillExtrusionBase, sizeof(fillExtrusionBase));
+        writeUniform(uniforms, *specification, "u_height", &fillExtrusionHeight, sizeof(fillExtrusionHeight));
     } else if (fillPatternDrawable) {
         const float pixelRatio = parameters.pixelRatio;
         writeUniform(uniforms,
