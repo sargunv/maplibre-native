@@ -64,8 +64,13 @@ std::optional<SkPath> tileClipPath(const mat4& matrix, const Size size) {
     return SkPath::Polygon(points, true);
 }
 
-std::optional<SkPath> tileClipPath(const PaintParameters& parameters, const UnwrappedTileID& tileID) {
-    return tileClipPath(parameters.matrixForTile(tileID), parameters.state.getSize());
+std::optional<SkPath> tileClipPath(const PaintParameters& parameters,
+                                   const UnwrappedTileID& tileID,
+                                   const Size canvasSize) {
+    // Build the clip in canvas (device) pixels so it matches the shader's
+    // u_viewport. parameters.state.getSize() is logical and would shrink the
+    // clip by 1/pixelRatio, masking out most of the canvas at pixelRatio>1.
+    return tileClipPath(parameters.matrixForTile(tileID), canvasSize);
 }
 
 void drawWithTileClip(gfx::Drawable& drawable,
@@ -77,7 +82,10 @@ void drawWithTileClip(gfx::Drawable& drawable,
     const auto& tileID = drawable.getTileID();
 
     if (canvas && drawable.getEnableStencil() && tileID) {
-        const auto path = tileClipPath(parameters, tileID->toUnwrapped());
+        const auto layerSize = canvas->getBaseLayerSize();
+        const Size canvasSize{static_cast<uint32_t>(layerSize.width()),
+                              static_cast<uint32_t>(layerSize.height())};
+        const auto path = tileClipPath(parameters, tileID->toUnwrapped(), canvasSize);
         if (path) {
             SkAutoCanvasRestore autoRestore(canvas, true);
             canvas->clipPath(*path, SkClipOp::kIntersect, false);
