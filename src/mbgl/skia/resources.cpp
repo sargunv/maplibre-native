@@ -250,6 +250,7 @@ void Texture2D::create() {
     } else {
         skImage.reset();
     }
+    invalidateShaderCache();
     dirty = false;
 }
 
@@ -267,6 +268,7 @@ void Texture2D::upload(const void* pixelData, const Size& size_) {
     } else {
         skImage.reset();
     }
+    invalidateShaderCache();
     dirty = false;
 }
 
@@ -292,6 +294,7 @@ void Texture2D::uploadSubRegion(const void* pixelData, const Size& subSize, uint
         SkPixmap pixmap(makeImageInfo(size, pixelFormat, channelType), pixels.data(), size.width * getPixelStride());
         skImage = SkImages::RasterFromPixmapCopy(pixmap);
     }
+    invalidateShaderCache();
 }
 
 void Texture2D::upload() {
@@ -311,14 +314,46 @@ void Texture2D::setImageSnapshot(sk_sp<SkImage> image_) {
     if (skImage) {
         size = {static_cast<uint32_t>(skImage->width()), static_cast<uint32_t>(skImage->height())};
     }
+    invalidateShaderCache();
     dirty = false;
 }
 
 const sk_sp<SkImage>& Texture2D::getImage() const {
     if (snapshotSource) {
+        const auto previousImage = skImage.get();
         skImage = snapshotSource->makeImageSnapshot();
+        if (skImage.get() != previousImage) {
+            invalidateShaderCache();
+        }
     }
     return skImage;
+}
+
+sk_sp<SkShader> Texture2D::getOrMakeShader(SkTileMode tileX,
+                                           SkTileMode tileY,
+                                           SkSamplingOptions sampling,
+                                           bool raw) const {
+    const auto& image = getImage();
+    if (!image) {
+        return nullptr;
+    }
+    if (cachedShader && cachedShaderImage == image.get() && cachedTileX == tileX && cachedTileY == tileY &&
+        cachedSampling == sampling && cachedRaw == raw) {
+        return cachedShader;
+    }
+    auto shader = raw ? image->makeRawShader(tileX, tileY, sampling) : image->makeShader(tileX, tileY, sampling);
+    cachedShader = shader;
+    cachedShaderImage = image.get();
+    cachedTileX = tileX;
+    cachedTileY = tileY;
+    cachedSampling = sampling;
+    cachedRaw = raw;
+    return shader;
+}
+
+void Texture2D::invalidateShaderCache() const {
+    cachedShader.reset();
+    cachedShaderImage = nullptr;
 }
 
 void DynamicTexture::uploadImage(const uint8_t* pixelData, gfx::TextureHandle& texHandle) {

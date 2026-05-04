@@ -162,6 +162,16 @@ public:
     const SamplerState& getSamplerState() const { return samplerState; }
     const std::vector<std::uint8_t>& getPixels() const { return pixels; }
 
+    // Lazy SkShader cache. The Skia drawable code repeatedly wraps the same
+    // SkImage into a fresh SkShader per drawable per frame; getOrMakeShader()
+    // memoizes one combination per texture, invalidated whenever the
+    // underlying SkImage changes (set by all the upload paths). For drawables
+    // that need a different combination than the current cache, the call
+    // builds and stores it (replacing the previous), so adjacent draws using
+    // the same combo still reuse.
+    sk_sp<SkShader> getOrMakeShader(SkTileMode tileX, SkTileMode tileY, SkSamplingOptions sampling, bool raw) const;
+    void invalidateShaderCache() const;
+
 private:
     SamplerState samplerState;
     gfx::TexturePixelType pixelFormat = gfx::TexturePixelType::RGBA;
@@ -172,6 +182,13 @@ private:
     mutable sk_sp<SkImage> skImage;
     sk_sp<SkSurface> snapshotSource;
     bool dirty = false;
+
+    mutable sk_sp<SkShader> cachedShader;
+    mutable SkTileMode cachedTileX = SkTileMode::kClamp;
+    mutable SkTileMode cachedTileY = SkTileMode::kClamp;
+    mutable SkSamplingOptions cachedSampling{};
+    mutable bool cachedRaw = false;
+    mutable const SkImage* cachedShaderImage = nullptr;
 };
 
 class DynamicTexture final : public gfx::DynamicTexture {

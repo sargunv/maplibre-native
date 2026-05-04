@@ -4989,7 +4989,8 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
         const auto filterMode = texture.getSamplerState().filter == gfx::TextureFilterType::Nearest
                                     ? SkFilterMode::kNearest
                                     : SkFilterMode::kLinear;
-        auto imageShader = image->makeShader(SkTileMode::kClamp, SkTileMode::kClamp, SkSamplingOptions(filterMode));
+        auto imageShader = texture.getOrMakeShader(
+            SkTileMode::kClamp, SkTileMode::kClamp, SkSamplingOptions(filterMode), /*raw=*/false);
         if (!imageShader) {
             return;
         }
@@ -5010,10 +5011,10 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
         }
         const float imageSize[2] = {static_cast<float>(image->width()), static_cast<float>(image->height())};
         writeUniform(uniforms, *specification, "u_image_size", imageSize, sizeof(imageSize));
-        auto imageShader = image->makeRawShader(
-            SkTileMode::kClamp, SkTileMode::kClamp, SkSamplingOptions(SkFilterMode::kLinear));
-        auto rampShader = ramp->makeRawShader(
-            SkTileMode::kClamp, SkTileMode::kClamp, SkSamplingOptions(SkFilterMode::kLinear));
+        auto imageShader = imageTexture.getOrMakeShader(
+            SkTileMode::kClamp, SkTileMode::kClamp, SkSamplingOptions(SkFilterMode::kLinear), /*raw=*/true);
+        auto rampShader = rampTexture.getOrMakeShader(
+            SkTileMode::kClamp, SkTileMode::kClamp, SkSamplingOptions(SkFilterMode::kLinear), /*raw=*/true);
         if (!imageShader || !rampShader) {
             return;
         }
@@ -5039,7 +5040,8 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
                                     : (texture.getSamplerState().filter == gfx::TextureFilterType::Nearest
                                            ? SkFilterMode::kNearest
                                            : SkFilterMode::kLinear);
-        auto imageShader = image->makeRawShader(SkTileMode::kClamp, SkTileMode::kClamp, SkSamplingOptions(filterMode));
+        auto imageShader = texture.getOrMakeShader(
+            SkTileMode::kClamp, SkTileMode::kClamp, SkSamplingOptions(filterMode), /*raw=*/true);
         if (!imageShader) {
             return;
         }
@@ -5090,12 +5092,14 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
         if (!normalizedElevationImage) {
             return;
         }
-        auto demShader = demImage->makeRawShader(
-            SkTileMode::kClamp, SkTileMode::kClamp, SkSamplingOptions(SkFilterMode::kLinear));
+        auto demShader = demTexture.getOrMakeShader(
+            SkTileMode::kClamp, SkTileMode::kClamp, SkSamplingOptions(SkFilterMode::kLinear), /*raw=*/true);
+        // The normalizedElevationImage is built per-frame from the elevation
+        // stops, so no caching opportunity for it.
         auto elevationShader = normalizedElevationImage->makeRawShader(
             SkTileMode::kClamp, SkTileMode::kClamp, SkSamplingOptions(SkFilterMode::kNearest));
-        auto colorShader = colorImage->makeShader(
-            SkTileMode::kClamp, SkTileMode::kClamp, SkSamplingOptions(SkFilterMode::kLinear));
+        auto colorShader = colorTexture.getOrMakeShader(
+            SkTileMode::kClamp, SkTileMode::kClamp, SkSamplingOptions(SkFilterMode::kLinear), /*raw=*/false);
         if (!demShader || !elevationShader || !colorShader) {
             return;
         }
@@ -5127,8 +5131,10 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
         const auto filterMode = texture0.getSamplerState().filter == gfx::TextureFilterType::Nearest
                                     ? SkFilterMode::kNearest
                                     : SkFilterMode::kLinear;
-        auto image0Shader = image0->makeShader(SkTileMode::kClamp, SkTileMode::kClamp, SkSamplingOptions(filterMode));
-        auto image1Shader = image1->makeShader(SkTileMode::kClamp, SkTileMode::kClamp, SkSamplingOptions(filterMode));
+        auto image0Shader = texture0.getOrMakeShader(
+            SkTileMode::kClamp, SkTileMode::kClamp, SkSamplingOptions(filterMode), /*raw=*/false);
+        auto image1Shader = texture1.getOrMakeShader(
+            SkTileMode::kClamp, SkTileMode::kClamp, SkSamplingOptions(filterMode), /*raw=*/false);
         if (!image0Shader || !image1Shader) {
             return;
         }
@@ -5147,8 +5153,8 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
         if (!image) {
             return;
         }
-        auto imageShader = image->makeShader(
-            SkTileMode::kClamp, SkTileMode::kClamp, SkSamplingOptions(SkFilterMode::kLinear));
+        auto imageShader = texture.getOrMakeShader(
+            SkTileMode::kClamp, SkTileMode::kClamp, SkSamplingOptions(SkFilterMode::kLinear), /*raw=*/false);
         if (!imageShader) {
             return;
         }
@@ -5166,8 +5172,8 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
         if (!image) {
             return;
         }
-        auto imageShader = image->makeShader(
-            SkTileMode::kClamp, SkTileMode::kClamp, SkSamplingOptions(SkFilterMode::kLinear));
+        auto imageShader = texture.getOrMakeShader(
+            SkTileMode::kClamp, SkTileMode::kClamp, SkSamplingOptions(SkFilterMode::kLinear), /*raw=*/false);
         if (!imageShader) {
             return;
         }
@@ -5185,8 +5191,8 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
         if (!image) {
             return;
         }
-        auto imageShader = image->makeShader(
-            SkTileMode::kClamp, SkTileMode::kClamp, SkSamplingOptions(SkFilterMode::kLinear));
+        auto imageShader = texture.getOrMakeShader(
+            SkTileMode::kClamp, SkTileMode::kClamp, SkSamplingOptions(SkFilterMode::kLinear), /*raw=*/false);
         if (!imageShader) {
             return;
         }
@@ -5204,9 +5210,11 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
         if (!image) {
             return;
         }
-        auto gradientShader = image->makeShader(lineSDFDrawable ? SkTileMode::kRepeat : SkTileMode::kClamp,
-                                                SkTileMode::kClamp,
-                                                SkSamplingOptions(SkFilterMode::kLinear));
+        auto gradientShader = texture.getOrMakeShader(
+            lineSDFDrawable ? SkTileMode::kRepeat : SkTileMode::kClamp,
+            SkTileMode::kClamp,
+            SkSamplingOptions(SkFilterMode::kLinear),
+            /*raw=*/false);
         if (!gradientShader) {
             return;
         }
