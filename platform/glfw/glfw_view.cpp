@@ -1180,7 +1180,33 @@ void GLFWView::onWindowRefresh(GLFWwindow *window) {
 }
 #endif
 
+void GLFWView::setScriptedZoom(double durationSeconds, double zoomDelta) {
+    scriptedZoomEnabled = true;
+    scriptedZoomDuration = durationSeconds;
+    scriptedZoomDelta = zoomDelta;
+}
+
 void GLFWView::render() {
+    if (scriptedZoomEnabled && map) {
+        const double now = glfwGetTime();
+        if (!scriptedZoomStarted) {
+            scriptedZoomStarted = true;
+            scriptedZoomStartTime = now;
+            const auto camera = map->getCameraOptions();
+            scriptedZoomBase = camera.zoom ? *camera.zoom : 0.0;
+        }
+        const double elapsed = now - scriptedZoomStartTime;
+        if (elapsed >= scriptedZoomDuration) {
+            std::exit(0);
+        }
+        // Triangle wave: 0 -> delta over first half, delta -> 0 over second half.
+        const double half = scriptedZoomDuration * 0.5;
+        const double phase = elapsed < half ? (elapsed / half) : ((scriptedZoomDuration - elapsed) / half);
+        const double targetZoom = scriptedZoomBase + scriptedZoomDelta * phase;
+        map->jumpTo(mbgl::CameraOptions().withZoom(targetZoom));
+        dirty = true;
+    }
+
     if (dirty && rendererFrontend) {
         MLN_TRACE_ZONE(ReRender);
 

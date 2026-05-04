@@ -68,6 +68,12 @@ public:
 
     mbgl::Size getSize() const;
 
+    // Drives a deterministic zoom-in/zoom-out animation centered on the
+    // initial camera. After one full cycle of `durationSeconds`, the demo
+    // exits. Useful with MLN_SKIA_FRAME_DUMP_SEQUENCE to capture frames
+    // through a controlled motion.
+    void setScriptedZoom(double durationSeconds, double zoomDelta);
+
     // mbgl::MapObserver implementation
     void onDidFinishLoadingStyle() override;
     void onWillStartRenderingFrame() override;
@@ -134,6 +140,14 @@ private:
 
     double freeCameraDemoPhase = -1;
     mbgl::TimePoint freeCameraDemoStartTime;
+
+    bool scriptedZoomEnabled = false;
+    double scriptedZoomDuration = 0.0;
+    double scriptedZoomDelta = 0.0;
+    double scriptedZoomBase = 0.0;
+    double scriptedZoomStartTime = 0.0;
+    bool scriptedZoomStarted = false;
+
     bool fullscreen = false;
     const bool benchmark = false;
     bool tracking = false;

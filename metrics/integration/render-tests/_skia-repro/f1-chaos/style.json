@@ -1,0 +1,37 @@
+{
+    "version": 8,
+    "metadata": {
+        "test": {
+            "operations": [
+                [
+                    "setStyle",
+                    "https://tiles.openfreemap.org/styles/liberty"
+                ],
+                [
+                    "setZoom",
+                    4.868205422281028
+                ],
+                [
+                    "setBearing",
+                    160.06686771472653
+                ],
+                [
+                    "setPitch",
+                    46
+                ],
+                [
+                    "setCenter",
+                    [
+                        139.33301951615306,
+                        -8.564969603397538
+                    ]
+                ]
+            ],
+            "width": 1024,
+            "height": 768,
+            "pixelRatio": 2
+        }
+    },
+    "sources": {},
+    "layers": []
+}

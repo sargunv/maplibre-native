@@ -62,6 +62,16 @@ int main(int argc, char* argv[]) {
     args::ValueFlag<double> pitchValue(argumentParser, "degrees", "Pitch", {'p', "pitch"});
     args::ValueFlag<double> rollValue(argumentParser, "degrees", "Roll", {'r', "roll"});
     args::ValueFlag<double> maxPitchValue(argumentParser, "degrees", "Max Pitch", {'P', "maxPitch"});
+    args::ValueFlag<double> scriptedZoomValue(argumentParser,
+                                              "seconds",
+                                              "Scripted zoom-in/zoom-out animation duration (per cycle); the demo "
+                                              "exits after one full cycle. Useful with MLN_SKIA_FRAME_DUMP "
+                                              "+ MLN_SKIA_FRAME_DUMP_SEQUENCE to capture motion artifacts.",
+                                              {"scriptedZoom"});
+    args::ValueFlag<double> scriptedZoomDeltaValue(argumentParser,
+                                                   "delta",
+                                                   "Zoom delta for --scriptedZoom (default 4)",
+                                                   {"scriptedZoomDelta"});
 
     try {
         argumentParser.ParseCLI(argc, argv);
@@ -243,6 +253,12 @@ int main(int argc, char* argv[]) {
     }
 
     map.getStyle().loadURL(style);
+
+    if (scriptedZoomValue) {
+        const double duration = args::get(scriptedZoomValue);
+        const double delta = scriptedZoomDeltaValue ? args::get(scriptedZoomDeltaValue) : 4.0;
+        view->setScriptedZoom(duration, delta);
+    }
 
     view->run();
 

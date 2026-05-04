@@ -7,8 +7,10 @@
 #include <include/gpu/ganesh/SkSurfaceGanesh.h>
 
 #include <algorithm>
+#include <cstdio>
 #include <cstdlib>
 #include <fstream>
+#include <string>
 
 namespace mbgl {
 namespace skia {
@@ -99,22 +101,42 @@ void RenderableResource::flush() {
             // different RenderableResource constructor and won't reproduce
             // bugs that live only in the layer-backed surface.
             if (const char* dumpPath = std::getenv("MLN_SKIA_FRAME_DUMP")) {
-                // Capture a single frame from the live (CAMetalLayer-backed)
-                // path so we can inspect what was actually drawn without screen
-                // capture. The headless RenderableResource constructor uses a
-                // different surface, so render-test artifacts won't reproduce
-                // bugs that live only in the layer-backed path. Default frame
-                // is 30 (long enough for tiles to load); override via
-                // MLN_SKIA_FRAME_DUMP_FRAME.
+                // Debug capture from the live (CAMetalLayer-backed) path so we
+                // can inspect what was actually drawn without screen capture.
+                // The headless RenderableResource constructor uses a different
+                // surface, so render-test artifacts won't reproduce bugs that
+                // live only in the layer-backed path.
+                //
+                // If MLN_SKIA_FRAME_DUMP_SEQUENCE is set, treat MLN_SKIA_FRAME_DUMP
+                // as a directory and write a numbered PNG per frame
+                // (frame_00000.png, frame_00001.png, ...). Otherwise dump a
+                // single PNG at frame number MLN_SKIA_FRAME_DUMP_FRAME (default
+                // 30, late enough for tiles to load in benchmark mode).
                 static int frameNum = 0;
                 static bool dumped = false;
                 ++frameNum;
-                int targetFrame = 30;
-                if (const char* envFrame = std::getenv("MLN_SKIA_FRAME_DUMP_FRAME")) {
-                    targetFrame = std::atoi(envFrame);
+                const bool sequence = std::getenv("MLN_SKIA_FRAME_DUMP_SEQUENCE") != nullptr;
+
+                bool shouldDump = false;
+                std::string outPath;
+                if (sequence) {
+                    char buf[32];
+                    std::snprintf(buf, sizeof(buf), "/frame_%05d.png", frameNum - 1);
+                    outPath = std::string(dumpPath) + buf;
+                    shouldDump = true;
+                } else if (!dumped) {
+                    int targetFrame = 30;
+                    if (const char* envFrame = std::getenv("MLN_SKIA_FRAME_DUMP_FRAME")) {
+                        targetFrame = std::atoi(envFrame);
+                    }
+                    if (frameNum == targetFrame) {
+                        dumped = true;
+                        outPath = dumpPath;
+                        shouldDump = true;
+                    }
                 }
-                if (!dumped && frameNum == targetFrame) {
-                    dumped = true;
+
+                if (shouldDump) {
                     skgpu::ganesh::FlushAndSubmit(liveSurface);
                     const auto width = liveSurface->width();
                     const auto height = liveSurface->height();
@@ -123,7 +145,7 @@ void RenderableResource::flush() {
                     if (image.valid() &&
                         liveSurface->readPixels(info, image.data.get(), image.stride(), 0, 0)) {
                         auto encoded = encodePNG(image);
-                        std::ofstream out(dumpPath, std::ios::binary);
+                        std::ofstream out(outPath, std::ios::binary);
                         out.write(encoded.data(), static_cast<std::streamsize>(encoded.size()));
                     }
                 }
@@ -359,7 +381,14 @@ RenderPass::RenderPass(gfx::Renderable& renderable, const gfx::RenderPassDescrip
     auto& resource = renderable.getResource<RenderableResource>();
     canvas = resource.getCanvas();
     if (canvas && descriptor.clearColor) {
-        canvas->clear(toSkColor(*descriptor.clearColor));
+        // Use drawColor with kSrc rather than clear(): with a layer-backed
+        // SkSurface that wraps a fresh CAMetalLayer drawable each frame, Skia
+        // can omit the clear under the assumption that the wrapped texture
+        // starts clean. CAMetalDrawable textures actually carry stale content
+        // from earlier swap-chain rotations, so we'd see ghosts of past frames
+        // bleed through wherever the new render leaves alpha < 1. drawColor
+        // with kSrc forces a real opaque overwrite of the entire canvas.
+        canvas->drawColor(toSkColor(*descriptor.clearColor), SkBlendMode::kSrc);
     }
 }
 
