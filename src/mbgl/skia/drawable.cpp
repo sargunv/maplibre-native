@@ -4043,10 +4043,12 @@ void Drawable::draw(PaintParameters& parameters, const gfx::UniformBufferArray* 
     }
 
     // Reuse the drawable's scratch buffer to avoid re-allocating the dense
-    // MeshVertex array every frame. assign() zero-initialises and grows the
-    // buffer if needed; the underlying capacity is retained across frames.
+    // MeshVertex array every frame. resize() only value-initialises new
+    // elements (i.e., when the count grows); when the count is unchanged
+    // the existing storage is reused as-is, since each per-frame pass
+    // writes the same set of fields for the same drawable type.
     auto& meshVertices = meshVertexScratch;
-    meshVertices.assign(vertexReader.count, MeshVertex{});
+    meshVertices.resize(vertexReader.count);
     for (std::size_t i = 0; i < vertexReader.count; ++i) {
         if (!vertexReader.read(
                 static_cast<std::uint16_t>(i), meshVertices[i].position[0], meshVertices[i].position[1])) {
