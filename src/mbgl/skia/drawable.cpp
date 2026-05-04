@@ -697,8 +697,15 @@ sk_sp<SkMeshSpecification> lineMeshSpecification(const bool unpremultiplyColor) 
         Varyings main(const Attributes attrs) {
             Varyings varyings;
             float4 projected = u_matrix * float4(attrs.a_pos, 0.0, 1.0);
-            float inv_w = projected.w == 0.0 ? 1.0 : 1.0 / projected.w;
-            float2 ndc = projected.xy * inv_w;
+            // Push behind-near vertices far off-canvas so any triangle
+            // sharing them is trivially clipped by the GPU rasterizer. Mirrors
+            // GL's hardware near-plane test for line segments and prevents the
+            // perspective divide from stretching them across the canvas at
+            // high pitch (the "slashes" bug). Triangles partially behind near
+            // are entirely dropped — a coarser version of GL's behavior, but
+            // visually it's much closer than uncorrected slashes.
+            float inv_w = projected.w >= 1.0e-4 ? 1.0 / projected.w : 0.0;
+            float2 ndc = projected.w >= 1.0e-4 ? projected.xy * inv_w : float2(-1.0e10);
             varyings.position = float2((ndc.x * 0.5 + 0.5) * u_viewport.x,
                                        (0.5 - ndc.y * 0.5) * u_viewport.y);
             varyings.color = attrs.a_color;
@@ -771,8 +778,8 @@ sk_sp<SkMeshSpecification> lineGradientMeshSpecification() {
         Varyings main(const Attributes attrs) {
             Varyings varyings;
             float4 projected = u_matrix * float4(attrs.a_pos, 0.0, 1.0);
-            float inv_w = projected.w == 0.0 ? 1.0 : 1.0 / projected.w;
-            float2 ndc = projected.xy * inv_w;
+            float inv_w = projected.w >= 1.0e-4 ? 1.0 / projected.w : 0.0;
+            float2 ndc = projected.w >= 1.0e-4 ? projected.xy * inv_w : float2(-1.0e10);
             varyings.position = float2((ndc.x * 0.5 + 0.5) * u_viewport.x,
                                        (0.5 - ndc.y * 0.5) * u_viewport.y);
             varyings.color = attrs.a_color;
@@ -839,8 +846,8 @@ sk_sp<SkMeshSpecification> linePatternMeshSpecification() {
         Varyings main(const Attributes attrs) {
             Varyings varyings;
             float4 projected = u_matrix * float4(attrs.a_pos, 0.0, 1.0);
-            float inv_w = projected.w == 0.0 ? 1.0 : 1.0 / projected.w;
-            float2 ndc = projected.xy * inv_w;
+            float inv_w = projected.w >= 1.0e-4 ? 1.0 / projected.w : 0.0;
+            float2 ndc = projected.w >= 1.0e-4 ? projected.xy * inv_w : float2(-1.0e10);
             varyings.position = float2((ndc.x * 0.5 + 0.5) * u_viewport.x,
                                        (0.5 - ndc.y * 0.5) * u_viewport.y);
             varyings.color = attrs.a_color;
@@ -943,8 +950,8 @@ sk_sp<SkMeshSpecification> lineSDFMeshSpecification() {
         Varyings main(const Attributes attrs) {
             Varyings varyings;
             float4 projected = u_matrix * float4(attrs.a_pos, 0.0, 1.0);
-            float inv_w = projected.w == 0.0 ? 1.0 : 1.0 / projected.w;
-            float2 ndc = projected.xy * inv_w;
+            float inv_w = projected.w >= 1.0e-4 ? 1.0 / projected.w : 0.0;
+            float2 ndc = projected.w >= 1.0e-4 ? projected.xy * inv_w : float2(-1.0e10);
             varyings.position = float2((ndc.x * 0.5 + 0.5) * u_viewport.x,
                                        (0.5 - ndc.y * 0.5) * u_viewport.y);
             varyings.color = attrs.a_color;
