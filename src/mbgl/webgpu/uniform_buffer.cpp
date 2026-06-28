@@ -6,6 +6,7 @@
 #include <mbgl/util/logging.hpp>
 #include <cstring>
 #include <cstdint>
+#include <vector>
 
 namespace mbgl {
 namespace webgpu {
@@ -28,6 +29,7 @@ UniformBuffer::UniformBuffer(Context& context_, const void* data, std::size_t si
 
     auto& backend = static_cast<RendererBackend&>(context.getBackend());
     WGPUDevice device = static_cast<WGPUDevice>(backend.getDevice());
+    WGPUQueue queue = static_cast<WGPUQueue>(backend.getQueue());
 
     if (device && alignedSize > 0) {
         WGPUBufferDescriptor bufferDesc = {};
@@ -35,18 +37,17 @@ UniformBuffer::UniformBuffer(Context& context_, const void* data, std::size_t si
         bufferDesc.label = label;
         bufferDesc.size = alignedSize;
         bufferDesc.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst;
-        bufferDesc.mappedAtCreation = data ? 1 : 0;
+        bufferDesc.mappedAtCreation = 0;
 
         buffer = wgpuDeviceCreateBuffer(device, &bufferDesc);
 
-        if (buffer && data) {
-            void* mappedData = wgpuBufferGetMappedRange(buffer, 0, alignedSize);
-            if (mappedData) {
-                std::memcpy(mappedData, data, size_);
-                if (alignedSize > size_) {
-                    std::memset(static_cast<std::uint8_t*>(mappedData) + size_, 0, alignedSize - size_);
-                }
-                wgpuBufferUnmap(buffer);
+        if (buffer && data && queue) {
+            if (alignedSize == size_) {
+                wgpuQueueWriteBuffer(queue, buffer, 0, data, size_);
+            } else {
+                std::vector<std::uint8_t> padded(alignedSize, 0);
+                std::memcpy(padded.data(), data, size_);
+                wgpuQueueWriteBuffer(queue, buffer, 0, padded.data(), alignedSize);
             }
         }
     }
