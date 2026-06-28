@@ -294,6 +294,7 @@ public:
         }
 
         wgpuBufferUnmap(stagingBuffer);
+        wgpuBufferDestroy(stagingBuffer);
         wgpuBufferRelease(stagingBuffer);
 
         return {size, std::move(data)};

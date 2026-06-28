@@ -19,16 +19,14 @@ BufferResource::BufferResource(
         return;
     }
 
-    // Store raw data if provided
-    if (data) {
-        raw.resize(size);
-        std::memcpy(raw.data(), data, size);
-    }
-
     auto& backend = static_cast<RendererBackend&>(context.getBackend());
     WGPUDevice device = static_cast<WGPUDevice>(backend.getDevice());
 
     if (!device) {
+        if (data) {
+            raw.resize(size);
+            std::memcpy(raw.data(), data, size);
+        }
         return;
     }
 
@@ -44,6 +42,11 @@ BufferResource::BufferResource(
 
     // Create buffer
     buffer = wgpuDeviceCreateBuffer(device, &bufferDesc);
+
+    if (persistent && data) {
+        raw.resize(size);
+        std::memcpy(raw.data(), data, size);
+    }
 
     if (buffer && data) {
         // Upload initial data via queue write
@@ -85,6 +88,7 @@ BufferResource::BufferResource(BufferResource&& other) noexcept
 
 BufferResource::~BufferResource() noexcept {
     if (buffer) {
+        wgpuBufferDestroy(buffer);
         wgpuBufferRelease(buffer);
         buffer = nullptr;
     }
@@ -96,6 +100,7 @@ BufferResource& BufferResource::operator=(BufferResource&& other) noexcept {
         assert(&context == &other.context);
 
         if (buffer) {
+            wgpuBufferDestroy(buffer);
             wgpuBufferRelease(buffer);
         }
         buffer = other.buffer;

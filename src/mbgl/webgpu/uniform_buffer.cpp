@@ -70,6 +70,7 @@ UniformBuffer::UniformBuffer(UniformBuffer&& other) noexcept
 
 UniformBuffer::~UniformBuffer() {
     if (buffer) {
+        wgpuBufferDestroy(buffer);
         wgpuBufferRelease(buffer);
         buffer = nullptr;
     }

@@ -63,6 +63,7 @@ Texture2D::~Texture2D() {
         textureView = nullptr;
     }
     if (texture) {
+        wgpuTextureDestroy(texture);
         wgpuTextureRelease(texture);
         texture = nullptr;
     }
@@ -214,6 +215,7 @@ void Texture2D::create() noexcept {
         textureView = nullptr;
     }
     if (texture) {
+        wgpuTextureDestroy(texture);
         wgpuTextureRelease(texture);
         texture = nullptr;
     }
