@@ -376,7 +376,7 @@ void Drawable::upload(gfx::UploadPass& uploadPass) {
     if (buildInstanceBuffer) {
         // Apply instance values to shader defaults (matching Metal's approach)
         std::vector<std::unique_ptr<gfx::VertexBufferResource>> instanceBuffers;
-        auto instanceBindings_ = webgpuUploadPass.buildAttributeBindings(impl->vertexCount,
+        auto instanceBindings_ = webgpuUploadPass.buildAttributeBindings(instanceAttributes->getMinCount(),
                                                                          impl->vertexType,
                                                                          /*vertexAttributeIndex=*/-1,
                                                                          /*vertexData=*/{},
