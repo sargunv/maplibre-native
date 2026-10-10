@@ -74,7 +74,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-324eb2cf.js";
+            window.path_to_searchindex_js = "searchindex-b4cda41d.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-24c1b73c.js"></script>
@@ -304,6 +304,12 @@ cd platform/android
 <h2 id="requirements"><a class="header" href="#requirements">Requirements</a></h2>
 <p><a href="https://developer.android.com/studio">Android Studio</a> needs to be installed.</p>
 <p>Open the <code>platform/android</code> directory to get started.</p>
+<h3 id="nix"><a class="header" href="#nix">Nix</a></h3>
+<p>With <a href="https://nixos.org">Nix</a> and flakes enabled, you can build from the command line instead. Running <code>nix develop .#android</code> in the root of the repository opens a shell with a JDK and an Android SDK that has the NDK version the build expects:</p>
+<pre><code class="language-bash">nix develop .#android
+cd platform/android
+./gradlew :MapLibreAndroidTestApp:assembleVulkanDebug
+</code></pre>
 <h2 id="setting-an-api-key"><a class="header" href="#setting-an-api-key">Setting an API Key</a></h2>
 <p><em>The test application (used for development purposes) uses MapTiler vector tiles, which require a MapTiler account and API key.</em></p>
 <p>With the first Gradle invocation, Gradle will take the value of the <code>MLN_API_KEY</code> environment variable and save it to <code>MapLibreAndroidTestApp/src/main/res/values/developer-config.xml</code>. If the environment variable wasn’t set, you can edit <code>developer-config.xml</code> manually and add your API key to the <code>api_key</code> resource.</p>
@@ -671,10 +677,11 @@ Confirm that no errors are shown.</p>
 xed build-ios/MapLibre\ Native.xcodeproj
 </code></pre>
 <h2 id="distribution"><a class="header" href="#distribution">Distribution</a></h2>
-<p>MapLibre iOS is distributed as an XCFramework via the <a href="https://github.com/maplibre/maplibre-gl-native-distribution">maplibre/maplibre-gl-native-distribution</a> repository. See <a href="#release-maplibre-ios">Release MapLibre iOS</a> for the release process. Refer to the <a href="https://github.com/maplibre/maplibre-native/blob/main/.github/workflows/ios-ci.yml"><code>ios-ci.yml</code></a> workflow for an up-to-date recipe for building an XCFramework. As of February 2025 we use:</p>
+<p>MapLibre iOS is distributed as an XCFramework via the <a href="https://github.com/maplibre/maplibre-gl-native-distribution">maplibre/maplibre-gl-native-distribution</a> repository. See <a href="#release-maplibre-ios">Release MapLibre iOS</a> for the release process. Refer to the <a href="https://github.com/maplibre/maplibre-native/blob/main/.github/workflows/ios-release.yml"><code>ios-release.yml</code></a> workflow for an up-to-date recipe for building an XCFramework. From <code>platform/ios</code>, run:</p>
 <pre><code>bazel build --compilation_mode=opt --features=dead_strip,thin_lto --objc_enable_binary_stripping \
-  --apple_generate_dsym --output_groups=+dsyms --//:renderer=metal //platform/ios:MapLibre.dynamic --embed_label=maplibre_ios_"$(cat VERSION)"
+  --apple_generate_dsym --//:renderer=metal //platform/ios:MapLibre.dynamic --embed_label=maplibre_ios_"$(cat VERSION)"
 </code></pre>
+<p>The dynamic XCFramework includes device and simulator dSYMs in each slice’s <code>dSYMs</code> directory, referenced by <code>DebugSymbolsPath</code> in its root <code>Info.plist</code>. A separate debug-symbol ZIP is no longer published. The static XCFramework retains debug information in its object files for inclusion in the consuming application’s dSYM.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="ios-tests"><a class="header" href="#ios-tests">iOS Tests</a></h1>
 <h2 id="ios-unit-tests"><a class="header" href="#ios-unit-tests">iOS Unit Tests</a></h2>
@@ -943,6 +950,8 @@ apt install libcurl4-openssl-dev libglfw3-dev libuv1-dev libpng-dev libicu-dev l
 </code></pre>
 <p>Optional: <code>libsqlite3-dev</code> (when not found will use SQLite as vendored dependency).</p>
 <p>When using Wayland (now default for <code>linux-opengl</code> preset): <code>libegl1-mesa-dev</code>.</p>
+<h3 id="nix-1"><a class="header" href="#nix-1">Nix</a></h3>
+<p>With <a href="https://nixos.org">Nix</a> and flakes enabled, you can instead run <code>nix develop</code> in the root of the repository. This opens a shell with all of the tools and libraries above, ready for the CMake presets below.</p>
 <h2 id="build-with-cmake"><a class="header" href="#build-with-cmake">Build with CMake</a></h2>
 <pre><code class="language-bash">cmake --preset linux-opengl
 cmake --build build-linux-opengl --target mbgl-render
@@ -2618,8 +2627,8 @@ bazel run //platform/glfw:glfw_app -- --style https://raw.githubusercontent.com/
 <pre><code class="language-shell">rustup target add --toolchain stable-x86_64-unknown-linux-gnu aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
 </code></pre>
 <p>See <a href="https://doc.rust-lang.org/nightly/rustc/platform-support.html">Platform Support</a> in the Rust documentation for more details. You will get a descriptive error message when the correct toolchain is not available, so we don’t list all possible combinations here.</p>
-<p>You also need to have cxxbridge installed:</p>
-<pre><code class="language-shell">cargo install cxxbridge-cmd@1.0.157 --locked
+<p>Rust 1.88 or newer is required. You also need to have the matching cxxbridge version installed:</p>
+<pre><code class="language-shell">cargo install cxxbridge-cmd@1.0.202 --locked
 </code></pre>
 <p>Set <code>-DMLN_USE_RUST=ON</code> when generating a configuration with CMake.</p>
 <h3 id="bazel-2"><a class="header" href="#bazel-2">Bazel</a></h3>
